@@ -152,7 +152,6 @@ class WaddleLogger:
             ''')
         else:
             # Store regular log data (numbers, strings, etc.)
-            print(f"Logging: {category}, {name}, {data}, {step or 0}, {timestamp}")
             self.con.execute(f'''
                 INSERT INTO logs VALUES (
                     '{self.id}', {step or 0}, '{category}', '{name}', {data}, '{timestamp}'
@@ -183,11 +182,12 @@ def _assign_config(app_config):
     global config
     config = app_config
 
-# Initialize the logger (like wandb.init)
-def init(project, db_root='waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60):
+def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60):
     global run
 
     # assign the passed config to the global config
+    config = config or argparse.Namespace()
+    print(type(config))
     _assign_config(config)
 
     db_path = os.path.join(db_root, f"{project}.db")
@@ -198,10 +198,13 @@ def init(project, db_root='waddle', config=None, use_gpu_metrics=True, gpu_metri
         except Exception as e:
             print(f"Could not initialize NVML: {e}")
             use_gpu_metrics = False
-    run = WaddleLogger(db_path, use_gpu_metrics=use_gpu_metrics)
+    run = WaddleLogger(db_path, use_gpu_metrics=use_gpu_metrics, config=config)
     if use_gpu_metrics and gpu_metrics_interval > 0:
         run.log_gpu_metrics_periodically(interval=gpu_metrics_interval)
     return run
+
+def finish():
+    pass
 
 def log(category, data, step, timestamp=None):
     if run is None:

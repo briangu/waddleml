@@ -18,7 +18,7 @@ setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License"
     ],
-    install_requires=['duckdb', 'pynvml'],
+    install_requires=['duckdb', 'pynvml', 'psutil'],
     python_requires='<=3.12,>=3.8',
     include_package_data=True,
     zip_safe=False,
