@@ -1,0 +1,2 @@
+README.md
+recursive-include klongpy/lib *.kg
