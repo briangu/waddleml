@@ -187,7 +187,6 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
 
     # assign the passed config to the global config
     config = config or argparse.Namespace()
-    print(type(config))
     _assign_config(config)
 
     db_path = os.path.join(db_root, f"{project}.db")
