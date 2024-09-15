@@ -9,7 +9,7 @@ setup(
     name='waddleml',
     packages=find_packages(),
     version='0.1.1',
-    description='WaddleML is a machine learning stats tracker',
+    description='WaddleML is a machine learning stats tracker built on DuckDB',
     author='Brian Guarraci',
     license='MIT',
     long_description=long_description,
@@ -18,7 +18,7 @@ setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License"
     ],
-    install_requires=['duckdb'],
+    install_requires=['duckdb', 'pynvml'],
     python_requires='<=3.12,>=3.8',
     include_package_data=True,
     zip_safe=False,
