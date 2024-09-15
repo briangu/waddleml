@@ -8,7 +8,7 @@ with open(os.path.join(directory, 'README.md'), encoding='utf-8') as f:
 setup(
     name='waddleml',
     packages=find_packages(),
-    version='0.1.0',
+    version='0.1.1',
     description='WaddleML is a machine learning stats tracker',
     author='Brian Guarraci',
     license='MIT',
