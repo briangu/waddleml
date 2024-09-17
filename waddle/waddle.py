@@ -10,8 +10,8 @@ import threading
 import time
 from datetime import datetime
 from pynvml import *
-import base64
-import argparse
+from typing import Any, Dict, Optional
+
 
 class WaddleLogger:
     def __init__(self, db_path, id=None, config=None, use_gpu_metrics=True):
@@ -40,24 +40,16 @@ class WaddleLogger:
             );
         ''')
 
+        # Modified logs table without value_type field
         self.con.execute('''
             CREATE TABLE IF NOT EXISTS logs (
                 id VARCHAR,
                 step INTEGER,
                 category VARCHAR,
                 name VARCHAR,
-                value DOUBLE,
-                timestamp TIMESTAMP
-            );
-        ''')
-
-        self.con.execute('''
-            CREATE TABLE IF NOT EXISTS blobs (
-                id VARCHAR,
-                step INTEGER,
-                category VARCHAR,
-                file_name VARCHAR,
-                file_data BLOB,
+                value_double DOUBLE,
+                value_string VARCHAR,
+                value_blob BLOB,
                 timestamp TIMESTAMP
             );
         ''')
@@ -87,7 +79,7 @@ class WaddleLogger:
         ''', (
             self.id, datetime.now(), cli_params_json, python_version,
             os_info, cpu_info, total_memory, json.dumps(self.get_gpu_system_metrics()),
-            base64.b64encode(code_data).decode('utf-8'), git_hash, datetime.now()
+            code_data, git_hash, datetime.now()
         ))
 
     def get_git_commit_hash(self):
@@ -122,7 +114,7 @@ class WaddleLogger:
                 handle = nvmlDeviceGetHandleByIndex(i)
                 gpu_metrics.append({
                     'gpu_index': i,
-                    'name': nvmlDeviceGetName(handle),
+                    'name': nvmlDeviceGetName(handle).decode('utf-8'),
                     'temperature': nvmlDeviceGetTemperature(handle, NVML_TEMPERATURE_GPU),
                     'memory_used': nvmlDeviceGetMemoryInfo(handle).used / (1024 ** 3),  # GB
                     'memory_total': nvmlDeviceGetMemoryInfo(handle).total / (1024 ** 3),  # GB
@@ -130,33 +122,39 @@ class WaddleLogger:
                 })
         return gpu_metrics
 
-    def log(self, category, name, data, step, is_blob=False, timestamp=None):
+    def log(self, data: Dict[str, Any], step: Optional[int], category='default', timestamp=None):
         """
         Logs data into DuckDB.
-        :param category: The category of the log (e.g., model, system, etc.).
-        :param name: The name of the data being logged (e.g., loss, accuracy, etc.).
-        :param data: The actual data to log.
+        :param data: A dictionary of key-value pairs to log.
         :param step: The training step or time step associated with the log.
-        :param is_blob: Whether the data is a blob (binary file) or regular log data.
+        :param category: The category of the data.
+        :param timestamp: Optional timestamp; if not provided, current time is used.
         """
         timestamp = timestamp or datetime.now()
-        if is_blob:
-            # Store the binary blob data
-            file_name = os.path.basename(name)
-            file_data_base64 = base64.b64encode(data).decode('utf-8')  # Store as base64 encoded data
+        for name, value in data.items():
+            value_double = None
+            value_string = None
+            value_blob = None
 
-            self.con.execute(f'''
-                INSERT INTO blobs VALUES (
-                    '{self.id}', {step}, '{category}', '{file_name}', '{file_data_base64}', '{timestamp}'
-                );
-            ''')
-        else:
-            # Store regular log data (numbers, strings, etc.)
-            self.con.execute(f'''
-                INSERT INTO logs VALUES (
-                    '{self.id}', {step or 0}, '{category}', '{name}', {data}, '{timestamp}'
-                );
-            ''')
+            if isinstance(value, (int, float)):
+                value_double = value
+            elif isinstance(value, str):
+                value_string = value
+            elif isinstance(value, (bytes, bytearray)):
+                value_blob = value
+            else:
+                # For other types, store as JSON string
+                value_string = json.dumps(value)
+
+            # Insert into the logs table
+            self.con.execute('''
+                INSERT INTO logs (
+                    id, step, category, name, value_double, value_string, value_blob, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                self.id, step or 0, category, name,
+                value_double, value_string, value_blob, timestamp
+            ))
 
     def log_gpu_metrics_periodically(self, interval=60):
         """
@@ -166,9 +164,11 @@ class WaddleLogger:
             while True:
                 gpu_metrics = self.get_gpu_system_metrics()
                 for metric in gpu_metrics:
+                    data = {}
                     for key, value in metric.items():
                         if key != 'gpu_index' and key != 'name':  # Skip index and name in logs
-                            self.log(category='gpu_system', name=f'gpu_{metric["gpu_index"]}_{key}', data=value, step=None, timestamp=datetime.now())
+                            data[f'gpu_{metric["gpu_index"]}_{key}'] = value
+                    self.log(data=data, step=None, category='gpu_system', timestamp=datetime.now())
                 time.sleep(interval)
 
         # Create and start a thread for logging GPU metrics
@@ -210,13 +210,7 @@ def log(category, data, step, timestamp=None):
         raise ValueError("WaddleLogger is not initialized. Please call `init()` first.")
     if not isinstance(data, dict):
         raise ValueError("The data must be a dictionary.")
-    for key, value in data.items():
-        run.log(category, key, value, step, False, timestamp)
-
-def log_blob(category, name, data, step, timestamp=None):
-    if run is None:
-        raise ValueError("WaddleLogger is not initialized. Please call `init()` first.")
-    run.log(category, name, data, step, True, timestamp)
+    run.log(data=data, step=step, category=category, timestamp=timestamp)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -229,7 +223,8 @@ if __name__ == "__main__":
     # Simulate the rest of your ML code here
     # The GPU logging will run in the background
     for step in range(10):
-        run.log(category='model', name='loss', data=0.01 * step, step=step)
+        log_data = {'loss': 0.01 * step}
+        log(category='model', data=log_data, step=step)
         time.sleep(5)  # Simulating training steps
 
     # Wait for the logging thread to finish

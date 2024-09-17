@@ -27,7 +27,7 @@ import waddle
 import random  # Just for simulating metrics, replace with real model code.
 
 # Initialize a new run with waddle.init, specifying the project name
-run = waddle.init(project="my_first_project")
+run = waddle.init(project="hello-world")
 
 # Save model inputs, hyperparameters, and metadata in run.config
 config = run.config
