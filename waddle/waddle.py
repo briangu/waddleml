@@ -1,4 +1,5 @@
-import duckdb
+# waddle_logger.py
+
 import psutil
 import platform
 import argparse
@@ -12,11 +13,10 @@ from datetime import datetime
 from pynvml import *
 from typing import Any, Dict, Optional
 import uuid
-import glob
-import multiprocessing
+import requests
 
 class WaddleLogger:
-    def __init__(self, db_root, project, id=None, config=None, use_gpu_metrics=True):
+    def __init__(self, db_root, project, id=None, config=None, use_gpu_metrics=True, mode='solo', server_url=None):
         self.db_root = db_root
         self.project = project
         self.id = id or datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -24,9 +24,14 @@ class WaddleLogger:
         os.makedirs(self.log_folder, exist_ok=True)
         self.config: argparse.Namespace = config
         self.use_gpu_metrics = use_gpu_metrics
+        self.mode = mode
+        self.server_url = server_url  # URL of the central server in distributed mode
 
         # Log initial system, CLI parameters, and code
         self.log_run_info()
+
+        if self.mode == 'distributed' and not self.server_url:
+            raise ValueError("In distributed mode, server_url must be specified.")
 
     def log_run_info(self):
         # Get system information
@@ -62,10 +67,19 @@ class WaddleLogger:
             'timestamp': datetime.now().isoformat()
         }
 
-        # Write run_info to a file in the log folder
-        run_info_file = os.path.join(self.log_folder, 'run_info.json')
-        with open(run_info_file, 'w') as f:
-            json.dump(run_info, f)
+        if self.mode == 'solo':
+            # Write run_info to a file in the log folder
+            run_info_file = os.path.join(self.log_folder, 'run_info.json')
+            with open(run_info_file, 'w') as f:
+                json.dump(run_info, f)
+        elif self.mode == 'distributed':
+            # Send run_info to the central server
+            try:
+                response = requests.post(f"{self.server_url}/ingest", json={'run_info': run_info})
+                if response.status_code != 200:
+                    print(f"Error sending run_info: {response.text}")
+            except Exception as e:
+                print(f"Error sending run_info: {e}")
 
     def get_git_commit_hash(self):
         """
@@ -112,11 +126,7 @@ class WaddleLogger:
 
     def log(self, data: Dict[str, Any], step: Optional[int], category='default', timestamp=None):
         """
-        Writes log entries as JSON files to the log folder.
-        :param data: A dictionary of key-value pairs to log.
-        :param step: The training step or time step associated with the log.
-        :param category: The category of the data.
-        :param timestamp: Optional timestamp; if not provided, current time is used.
+        Writes log entries as JSON files to the log folder (solo mode) or sends via REST API (distributed mode).
         """
         timestamp = timestamp or datetime.now().isoformat()
         for name, value in data.items():
@@ -128,16 +138,25 @@ class WaddleLogger:
                 'value': value,
                 'timestamp': timestamp
             }
-            # Generate a unique filename
-            filename = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
-            temp_filename = f"{filename}.tmp"
-            filepath = os.path.join(self.log_folder, temp_filename)
-            # Write to a temporary file
-            with open(filepath, 'w') as f:
-                json.dump(log_entry, f)
-            # Rename to the final filename to ensure atomicity
-            final_filepath = os.path.join(self.log_folder, filename)
-            os.rename(filepath, final_filepath)
+            if self.mode == 'solo':
+                # Write to local folder
+                filename = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
+                temp_filename = f"{filename}.tmp"
+                filepath = os.path.join(self.log_folder, temp_filename)
+                # Write to a temporary file
+                with open(filepath, 'w') as f:
+                    json.dump(log_entry, f)
+                # Rename to the final filename to ensure atomicity
+                final_filepath = os.path.join(self.log_folder, filename)
+                os.rename(filepath, final_filepath)
+            elif self.mode == 'distributed':
+                # Send via REST API to the central server
+                try:
+                    response = requests.post(f"{self.server_url}/ingest", json=log_entry)
+                    if response.status_code != 200:
+                        print(f"Error sending log entry: {response.text}")
+                except Exception as e:
+                    print(f"Error sending log entry: {e}")
 
     def log_gpu_metrics_periodically(self, interval=60):
         """
@@ -161,15 +180,15 @@ class WaddleLogger:
 # Global variables and functions
 config: argparse.Namespace = argparse.Namespace()
 run: WaddleLogger = None
-db_writer_process: Optional[multiprocessing.Process] = None
+server_process: Optional[subprocess.Popen] = None
 
 def _assign_config(app_config):
     global config
     config = app_config
 
-def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60):
+def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60, mode='solo', server_url=None):
     global run
-    global db_writer_process
+    global server_process
 
     # Assign the passed config to the global config
     config = config or argparse.Namespace()
@@ -183,44 +202,30 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
             print(f"Could not initialize NVML: {e}")
             use_gpu_metrics = False
 
-    run = WaddleLogger(db_root=db_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config)
+    if mode == 'solo':
+        # Start the waddle server as a subprocess
+        server_cmd = [sys.executable, 'waddle_server.py', '--db-root', db_root, '--project', project, '--watch-folder', os.path.join(db_root, project)]
+        server_process = subprocess.Popen(server_cmd)
+        # Allow the server some time to start
+        time.sleep(2)
+        server_url = 'http://localhost:8000'
+    elif mode == 'distributed':
+        if not server_url:
+            raise ValueError("In distributed mode, server_url must be specified.")
+
+    run = WaddleLogger(db_root=db_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config, mode=mode, server_url=server_url)
     if use_gpu_metrics and gpu_metrics_interval > 0:
         run.log_gpu_metrics_periodically(interval=gpu_metrics_interval)
-
-    # Start the database writer process if not already running
-    pid_file = os.path.join(db_root, 'db_writer.pid')
-    launch_process = True
-    if os.path.exists(pid_file):
-        # Check if the process is running
-        with open(pid_file, 'r') as f:
-            pid = int(f.read())
-        if psutil.pid_exists(pid):
-            print("Database writer process is already running.")
-            launch_process = False
-        else:
-            print("Found stale PID file. Starting a new database writer process.")
-            os.remove(pid_file)
-    if launch_process:
-        # Start the database writer process
-        db_writer_process = multiprocessing.Process(target=database_writer_process, args=(db_root, project))
-        db_writer_process.start()
-        # Write the PID to the pid file
-        with open(pid_file, 'w') as f:
-            f.write(str(db_writer_process.pid))
 
     return run
 
 def finish():
-    global db_writer_process
-    if db_writer_process is not None:
-        print("Terminating database writer process.")
-        db_writer_process.terminate()
-        db_writer_process.join()
-        db_writer_process = None
-        # Remove the PID file
-        pid_file = os.path.join(run.db_root, 'db_writer.pid')
-        if os.path.exists(pid_file):
-            os.remove(pid_file)
+    global server_process
+    if server_process is not None:
+        print("Terminating waddle server process.")
+        server_process.terminate()
+        server_process.wait()
+        server_process = None
 
 def log(category, data, step, timestamp=None):
     if run is None:
@@ -229,122 +234,15 @@ def log(category, data, step, timestamp=None):
         raise ValueError("The data must be a dictionary.")
     run.log(data=data, step=step, category=category, timestamp=timestamp)
 
-def database_writer_process(db_root, project):
-    """
-    Process that continuously reads log entries from the log folders and writes them to the database.
-    """
-    db_path = os.path.join(db_root, f"{project}.db")
-    con = duckdb.connect(db_path)
-
-    # Create tables if they don't exist
-    con.execute('''
-        CREATE TABLE IF NOT EXISTS run_info (
-            id VARCHAR,
-            start_time TIMESTAMP,
-            cli_params JSON,
-            python_version VARCHAR,
-            os_info VARCHAR,
-            cpu_info VARCHAR,
-            total_memory DOUBLE,
-            gpu_info JSON,
-            code BLOB,
-            git_hash VARCHAR,
-            timestamp TIMESTAMP,
-            PRIMARY KEY (id)
-        );
-    ''')
-
-    con.execute('''
-        CREATE TABLE IF NOT EXISTS logs (
-            id VARCHAR,
-            step INTEGER,
-            category VARCHAR,
-            name VARCHAR,
-            value_double DOUBLE,
-            value_string VARCHAR,
-            value_blob BLOB,
-            timestamp TIMESTAMP
-        );
-    ''')
-
-    try:
-        while True:
-            log_folders = glob.glob(os.path.join(db_root, project, '*'))
-
-            for log_folder in log_folders:
-                run_id = os.path.basename(log_folder)
-                run_info_file = os.path.join(log_folder, 'run_info.json')
-                if os.path.exists(run_info_file):
-                    # Read run_info and insert into the database if not already inserted
-                    try:
-                        con.execute("SELECT 1 FROM run_info WHERE id = ?", (run_id,))
-                        if not con.fetchall():
-                            with open(run_info_file, 'r') as f:
-                                run_info = json.load(f)
-                            # Insert into run_info table
-                            con.execute('''
-                                INSERT INTO run_info VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            ''', (
-                                run_info['id'], run_info['start_time'], run_info['cli_params'], run_info['python_version'],
-                                run_info['os_info'], run_info['cpu_info'], run_info['total_memory'], run_info['gpu_info'],
-                                run_info['code'].encode('utf-8'), run_info['git_hash'], run_info['timestamp']
-                            ))
-                    except Exception as e:
-                        print(f"Error inserting run_info for {run_id}: {e}")
-
-                # Process log entries
-                log_files = glob.glob(os.path.join(log_folder, '*.json'))
-                for log_file in log_files:
-                    if os.path.basename(log_file) == 'run_info.json':
-                        continue
-                    try:
-                        with open(log_file, 'r') as f:
-                            log_entry = json.load(f)
-                        # Determine the type of the value and insert accordingly
-                        value = log_entry['value']
-                        value_double = None
-                        value_string = None
-                        value_blob = None
-
-                        if isinstance(value, (int, float)):
-                            value_double = value
-                        elif isinstance(value, str):
-                            value_string = value
-                        elif isinstance(value, (list, dict)):
-                            # Convert lists and dicts to JSON string
-                            value_string = json.dumps(value)
-                        elif isinstance(value, bytes):
-                            value_blob = value
-                        else:
-                            # For other types, store as string
-                            value_string = json.dumps(value)
-
-                        con.execute('''
-                            INSERT INTO logs (
-                                id, step, category, name, value_double, value_string, value_blob, timestamp
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            log_entry['id'], log_entry['step'], log_entry['category'], log_entry['name'],
-                            value_double, value_string, value_blob, log_entry['timestamp']
-                        ))
-                        # Delete the log file after processing
-                        os.remove(log_file)
-                    except Exception as e:
-                        print(f"Error processing log file {log_file}: {e}")
-
-            time.sleep(1)  # Sleep for a short time before checking again
-    except KeyboardInterrupt:
-        print("Database writer process terminated.")
-    finally:
-        con.close()
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--project-name', type=str, default='experiment')
+    parser.add_argument('--mode', type=str, choices=['solo', 'distributed'], default='solo')
+    parser.add_argument('--server-url', type=str, default=None)
     args = parser.parse_args()
 
-    # Initialize WaddleLogger and start the database writer process
-    init(project=args.project_name, config=args)
+    # Initialize WaddleLogger
+    init(project=args.project_name, config=args, mode=args.mode, server_url=args.server_url)
 
     # Simulate the rest of your ML code here
     # The GPU logging will run in the background
@@ -354,9 +252,7 @@ if __name__ == "__main__":
             log(category='model', data=log_data, step=step)
             time.sleep(5)  # Simulating training steps
     finally:
-        # Finish up and terminate the database writer process
+        # Finish up and terminate the server process
         finish()
 
     print("Done!")
-
-    # The database should now be up to date
