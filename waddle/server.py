@@ -1,5 +1,3 @@
-# waddle_server.py
-
 import argparse
 import asyncio
 import glob
@@ -327,7 +325,13 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 def main(port=8000, bind="127.0.0.1", log_level="info"):
-    uvicorn.run("waddle_server:app", host=bind, port=port, log_level=log_level, lifespan="on")
+    uvicorn.run("waddle.server:app", host=bind, port=port, log_level=log_level, lifespan="on")
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--bind", type=str, default="127.0.0.1")
+    parser.add_argument("--log-level", type=str, default="info")
+    args = parser.parse_args()
+    main(port=args.port, bind=args.bind, log_level=args.log_level)
