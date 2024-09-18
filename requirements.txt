@@ -1,0 +1,8 @@
+duckdb==1.1.0
+fastapi==0.114.2
+psutil==6.0.0
+pynvml==11.5.3
+requests==2.32.3
+rich==13.8.1
+uvicorn==0.30.6
+websockets==13.0.1

@@ -7,12 +7,13 @@ import json
 import os
 import threading
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 import duckdb
+import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-import uvicorn
 
 app = FastAPI()
 
@@ -198,8 +199,8 @@ class WaddleServer:
 
 waddle_server_instance = None
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global waddle_server_instance
     parser = argparse.ArgumentParser()
     parser.add_argument('--db-root', type=str, default='.waddle')
@@ -208,11 +209,10 @@ async def startup_event():
     args, _ = parser.parse_known_args()
 
     waddle_server_instance = WaddleServer(db_root=args.db_root, project=args.project, watch_folder=args.watch_folder)
-
-@app.on_event("shutdown")
-def shutdown_event():
+    yield
     if waddle_server_instance:
         waddle_server_instance.stop()
+
 
 @app.post("/ingest")
 async def ingest_log(log_entry: dict):
@@ -326,8 +326,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-def main():
-    uvicorn.run("waddle_server:app", host="0.0.0.0", port=8000, log_level="info")
+def main(port=8000, bind="127.0.0.1", log_level="info"):
+    uvicorn.run("waddle_server:app", host=bind, port=port, log_level=log_level, lifespan="on")
 
 if __name__ == "__main__":
     main()
