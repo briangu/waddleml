@@ -67,6 +67,7 @@
                     throw new Error('Network response was not ok');
                 }
                 const data = await response.json();
+                console.log('Data received:', data);
                 // Process data and create charts
                 data.forEach(entry => {
                     if (entry.name === 'loss') {
@@ -85,9 +86,10 @@
             const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
             ws.onmessage = function(event) {
                 const logEntry = JSON.parse(event.data);
+                console.log(logEntry);
                 if (logEntry.name === 'loss') {
                     chartData.labels.push(logEntry.step);
-                    chartData.datasets[0].data.push(logEntry.value_double);
+                    chartData.datasets[0].data.push(logEntry.value);
                     myChart.update();
                 }
             };
