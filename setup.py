@@ -12,7 +12,7 @@ with open(os.path.join(directory, 'requirements.txt')) as f:
 setup(
     name='waddleml',
     packages=find_packages(),
-    version='0.1.1',
+    version='0.1.2',
     description='WaddleML is a machine learning stats tracker built on DuckDB',
     author='Brian Guarraci',
     license='MIT',
