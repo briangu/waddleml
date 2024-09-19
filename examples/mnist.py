@@ -8,13 +8,13 @@ import waddle
 
 def main():
     # Initialize Waddle
-    waddle.init(project='mnist_example')
+    waddle.init(project='mnist_example', server_bind='0.0.0.0')
 
     # Device configuration
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Hyperparameters
-    num_epochs = 5
+    num_epochs = 100 # enough epochs to view the data in browser
     batch_size = 64
     learning_rate = 0.001
 

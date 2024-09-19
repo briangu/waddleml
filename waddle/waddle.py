@@ -186,7 +186,7 @@ def _assign_config(app_config):
     global config
     config = app_config
 
-def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60, mode='solo', server_url=None):
+def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60, mode='solo', server_url=None, server_port=8000, server_bind="127.0.0.1"):
     global run
     global server_process
 
@@ -204,7 +204,7 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
 
     if mode == 'solo':
         # Start the waddle server as a subprocess
-        server_cmd = ['waddle', '--mode', 'server', '--db-root', db_root, '--project', project, '--watch-folder', os.path.join(db_root, project)]
+        server_cmd = ['waddle', '--mode', 'server', '--server-port', str(server_port), '--server-bind', server_bind, '--db-root', db_root, '--project', project, '--watch-folder', os.path.join(db_root, project)]
         server_process = subprocess.Popen(server_cmd)
         # Allow the server some time to start
         time.sleep(2)

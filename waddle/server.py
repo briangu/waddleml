@@ -330,8 +330,8 @@ def main(port=8000, bind="127.0.0.1", log_level="info"):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--bind", type=str, default="127.0.0.1")
+    parser.add_argument("--server-port", type=int, default=8000)
+    parser.add_argument("--server-bind", type=str, default="127.0.0.1")
     parser.add_argument("--log-level", type=str, default="info")
     args = parser.parse_args()
-    main(port=args.port, bind=args.bind, log_level=args.log_level)
+    main(port=args.server_port, bind=args.server_bind, log_level=args.log_level)
