@@ -214,6 +214,10 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
             raise ValueError("In distributed mode, server_url must be specified.")
 
     run = WaddleLogger(db_root=db_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config, mode=mode, server_url=server_url)
+
+    print("Waddle Logger initialized.")
+    print("Run ID:", run.id)
+
     if use_gpu_metrics and gpu_metrics_interval > 0:
         run.log_gpu_metrics_periodically(interval=gpu_metrics_interval)
 
@@ -222,7 +226,6 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
 def finish():
     global server_process
     if server_process is not None:
-        print("Terminating waddle server process.")
         server_process.terminate()
         server_process.wait()
         server_process = None

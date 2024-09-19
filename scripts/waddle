@@ -55,7 +55,7 @@ async def websocket_client(uri):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, choices=['server', 'client'], default='server')
-    parser.add_argument('--log-level', type=str, default='info')
+    parser.add_argument('--log-level', type=str, default='critical')
     parser.add_argument('--server-port', type=int, default=8000)
     parser.add_argument('--server-bind', type=str, default='127.0.0.1')
     parser.add_argument('--server-url', type=str, default=None)

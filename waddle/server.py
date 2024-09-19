@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+import logging
 
 import duckdb
 import uvicorn
@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Requ
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+logger = logging.getLogger(__name__)
 
 waddle_server_instance = None
 
@@ -43,18 +44,18 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        print(f"WebSocket connection established: {websocket.client}")
+        logger.info(f"WebSocket connection established: {websocket.client}")
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
-        print(f"WebSocket connection closed: {websocket.client}")
+        logger.info(f"WebSocket connection closed: {websocket.client}")
 
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
             except Exception as e:
-                print(f"Error sending message to client {connection.client}: {e}")
+                logger.error(f"Error sending message to client {connection.client}: {e}")
                 self.disconnect(connection)
 
 manager = ConnectionManager()
@@ -135,7 +136,7 @@ class WaddleServer:
                                     run_info['code'].encode('utf-8'), run_info['git_hash'], run_info['timestamp']
                                 ))
                         except Exception as e:
-                            print(f"Error inserting run_info for {run_id}: {e}")
+                            logger.error(f"Error inserting run_info for {run_id}: {e}")
 
                     # Process log entries
                     log_files = glob.glob(os.path.join(log_folder, '*.json'))
@@ -150,11 +151,11 @@ class WaddleServer:
                             # Delete the log file after processing
                             os.remove(log_file)
                         except Exception as e:
-                            print(f"Error processing log file {log_file}: {e}")
+                            logger.error(f"Error processing log file {log_file}: {e}")
 
                 time.sleep(1)  # Sleep for a short time before checking again
         except Exception as e:
-            print(f"Error in watch_folder_for_logs: {e}")
+            logger.error(f"Error in watch_folder_for_logs: {e}")
 
     def ingest_log_entry(self, log_entry):
         try:
@@ -214,9 +215,8 @@ class WaddleServer:
             asyncio.run_coroutine_threadsafe(manager.broadcast(log_entry), self.loop)
 
         except Exception as e:
-            print(f"Error ingesting log entry: {e}")
+            logger.error(f"Error ingesting log entry: {e}")
             raise
-
 
 @app.post("/ingest")
 async def ingest_log(log_entry: dict):
@@ -251,14 +251,29 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-def main(port=8000, bind="127.0.0.1", log_level="info"):
+def main(port=8000, bind="127.0.0.1", log_level="critical"):
+    logging.getLogger("uvicorn.error").handlers = []
+    logging.getLogger("uvicorn.error").propagate = False
+
+    numeric_level = getattr(logging, log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f'Invalid log level: {log_level}')
+    logging.basicConfig(level=numeric_level)
+    logger.setLevel(numeric_level)
+
+    logger.info("Starting Waddle server.")
+    print("Starting Waddle server.")
+    logger.info(f"Listening at http://{bind}:{port}")
+    print(f"Listening at http://{bind}:{port}")
     uvicorn.run("waddle.server:app", host=bind, port=port, log_level=log_level, lifespan="on")
+    logger.info("Waddle server stopped.")
+    print("Waddle server stopped.")
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--server-port", type=int, default=8000)
     parser.add_argument("--server-bind", type=str, default="127.0.0.1")
-    parser.add_argument("--log-level", type=str, default="info")
+    parser.add_argument("--log-level", type=str, default="critical")
     args = parser.parse_args()
     main(port=args.server_port, bind=args.server_bind, log_level=args.log_level)
