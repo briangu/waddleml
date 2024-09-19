@@ -10,10 +10,31 @@ from datetime import datetime
 
 import duckdb
 import uvicorn
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
-app = FastAPI()
+
+waddle_server_instance = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global waddle_server_instance
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--db-root', type=str, default='.waddle')
+    parser.add_argument('--project', type=str, default='experiment')
+    parser.add_argument('--watch-folder', type=str, default=None)
+    args, _ = parser.parse_known_args()
+
+    loop = asyncio.get_running_loop()
+    waddle_server_instance = WaddleServer(db_root=args.db_root, project=args.project, watch_folder=args.watch_folder, loop=loop)
+    yield
+    if waddle_server_instance:
+        waddle_server_instance.stop()
+
+app = FastAPI(lifespan=lifespan)
+
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 class ConnectionManager:
     def __init__(self):
@@ -39,11 +60,12 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 class WaddleServer:
-    def __init__(self, db_root, project, watch_folder=None):
+    def __init__(self, db_root, project, watch_folder=None, loop=None):
         self.db_root = db_root
         self.project = project
         self.db_path = os.path.join(db_root, f"{project}.db")
         self.watch_folder = watch_folder
+        self.loop = loop
 
         self.con = duckdb.connect(self.db_path)
 
@@ -189,27 +211,11 @@ class WaddleServer:
             ))
 
             # Broadcast the new log entry to connected WebSocket clients
-            asyncio.create_task(manager.broadcast(log_entry))
+            asyncio.run_coroutine_threadsafe(manager.broadcast(log_entry), self.loop)
 
         except Exception as e:
             print(f"Error ingesting log entry: {e}")
             raise
-
-waddle_server_instance = None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global waddle_server_instance
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--db-root', type=str, default='.waddle')
-    parser.add_argument('--project', type=str, default='experiment')
-    parser.add_argument('--watch-folder', type=str, default=None)
-    args, _ = parser.parse_known_args()
-
-    waddle_server_instance = WaddleServer(db_root=args.db_root, project=args.project, watch_folder=args.watch_folder)
-    yield
-    if waddle_server_instance:
-        waddle_server_instance.stop()
 
 
 @app.post("/ingest")
@@ -233,87 +239,8 @@ async def get_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
-async def read_root():
-    html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Waddle Dashboard</title>
-        <style>
-            #chart {
-                width: 800px;
-                height: 400px;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Waddle Dashboard</h1>
-        <canvas id="chart"></canvas>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script>
-            const chartData = {
-                labels: [],
-                datasets: [{
-                    label: 'Loss',
-                    data: [],
-                    borderColor: 'rgb(75, 192, 192)',
-                    tension: 0.1
-                }]
-            };
-
-            const config = {
-                type: 'line',
-                data: chartData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                }
-            };
-
-            const myChart = new Chart(
-                document.getElementById('chart'),
-                config
-            );
-
-            async function fetchData() {
-                const response = await fetch('/data');
-                const data = await response.json();
-                // Process data and create charts
-                data.forEach(entry => {
-                    if (entry.name === 'loss') {
-                        chartData.labels.push(entry.step);
-                        chartData.datasets[0].data.push(entry.value_double);
-                    }
-                });
-                myChart.update();
-            }
-
-            function setupWebSocket() {
-                const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-                const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
-                ws.onmessage = function(event) {
-                    const logEntry = JSON.parse(event.data);
-                    if (logEntry.name === 'loss') {
-                        chartData.labels.push(logEntry.step);
-                        chartData.datasets[0].data.push(logEntry.value);
-                        myChart.update();
-                    }
-                };
-                ws.onclose = function(event) {
-                    console.log('WebSocket closed. Reconnecting...');
-                    setTimeout(setupWebSocket, 1000);
-                };
-            }
-
-            window.onload = function() {
-                fetchData();
-                setupWebSocket();
-            };
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content, status_code=200)
+async def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

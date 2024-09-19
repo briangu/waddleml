@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Waddle Dashboard</title>
+    <style>
+        #chart-container {
+            width: 800px;
+            height: 400px;
+            position: relative;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Waddle Dashboard</h1>
+    <div id="chart-container">
+        <canvas id="chart"></canvas>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const chartData = {
+            labels: [],
+            datasets: [{
+                label: 'Loss',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        };
+
+        const config = {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Step'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Loss'
+                        }
+                    }
+                }
+            }
+        };
+
+        const myChart = new Chart(
+            document.getElementById('chart'),
+            config
+        );
+
+        async function fetchData() {
+            try {
+                const response = await fetch('/data');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                // Process data and create charts
+                data.forEach(entry => {
+                    if (entry.name === 'loss') {
+                        chartData.labels.push(entry.step);
+                        chartData.datasets[0].data.push(entry.value_double);
+                    }
+                });
+                myChart.update();
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        function setupWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+            ws.onmessage = function(event) {
+                const logEntry = JSON.parse(event.data);
+                if (logEntry.name === 'loss') {
+                    chartData.labels.push(logEntry.step);
+                    chartData.datasets[0].data.push(logEntry.value_double);
+                    myChart.update();
+                }
+            };
+            ws.onclose = function(event) {
+                console.log('WebSocket closed. Reconnecting...');
+                setTimeout(setupWebSocket, 1000);
+            };
+        }
+
+        window.onload = function() {
+            fetchData();
+            setupWebSocket();
+        };
+    </script>
+</body>
+</html>
