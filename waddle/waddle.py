@@ -114,7 +114,7 @@ class WaddleLogger:
                     handle = nvmlDeviceGetHandleByIndex(i)
                     gpu_metrics.append({
                         'gpu_index': i,
-                        'name': nvmlDeviceGetName(handle).decode('utf-8'),
+                        'name': nvmlDeviceGetName(handle),
                         'temperature': nvmlDeviceGetTemperature(handle, NVML_TEMPERATURE_GPU),
                         'memory_used': nvmlDeviceGetMemoryInfo(handle).used / (1024 ** 3),  # GB
                         'memory_total': nvmlDeviceGetMemoryInfo(handle).total / (1024 ** 3),  # GB
@@ -204,7 +204,7 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
 
     if mode == 'solo':
         # Start the waddle server as a subprocess
-        server_cmd = [sys.executable, 'waddle_server.py', '--db-root', db_root, '--project', project, '--watch-folder', os.path.join(db_root, project)]
+        server_cmd = ['waddle', '--mode', 'server', '--db-root', db_root, '--project', project, '--watch-folder', os.path.join(db_root, project)]
         server_process = subprocess.Popen(server_cmd)
         # Allow the server some time to start
         time.sleep(2)
