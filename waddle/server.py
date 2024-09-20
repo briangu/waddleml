@@ -230,8 +230,8 @@ def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 @app.get("/data")
-async def get_data(history: int = 1000):
-    history = min(max(history, 1), 1000)  # Limit history to between 1 and 1000
+async def get_data(history: int = 2000):
+    history = min(max(history, 1), 2000)  # Limit history to between 1 and 1000
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
