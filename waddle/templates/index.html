@@ -1,45 +1,221 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Waddle Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        #chart-container {
-            width: 800px;
-            height: 400px;
-            position: relative;
+        /* Reset some default styles for consistency across browsers */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        /* Main container for all charts */
+        #charts-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Style for each category's <details> element */
+        details.category-section {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #ffffff;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease;
+        }
+
+        details.category-section:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Style for the summary (header) of each category */
+        details.category-section summary {
+            font-size: 1.5em;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 15px;
+            background-color: #e0e0e0;
+            position: relative;
+            list-style: none; /* Remove default disclosure triangle */
+            user-select: none;
+        }
+
+        /* Custom disclosure triangle */
+        details.category-section summary::before {
+            content: "▶";
+            display: inline-block;
+            margin-right: 10px;
+            transition: transform 0.3s ease;
+            font-size: 1em;
+        }
+
+        details.category-section[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        /* Container for all charts within a category */
+        .charts-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 15px;
+            background-color: #fafafa;
+        }
+
+        /* Individual chart container */
+        .chart-container {
+            flex: 1 1 45%; /* Grow to fill space, base width 45% */
+            min-width: 300px;
+            height: 300px;
+            position: relative;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Chart title */
+        .chart-title {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+        }
+
+        /* Ensure the canvas fills the container */
+        .chart-container canvas {
+            flex-grow: 1;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .charts-wrapper {
+                flex-direction: column;
+            }
+
+            .chart-container {
+                flex: 1 1 100%;
+                min-width: unset;
+                height: 300px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5em;
+            }
+
+            details.category-section summary {
+                font-size: 1.2em;
+                padding: 12px;
+            }
+
+            .chart-container {
+                height: 250px;
+            }
+
+            .chart-title {
+                font-size: 1em;
+                margin-bottom: 8px;
+            }
+        }
     </style>
 </head>
 <body>
     <h1>Waddle Dashboard</h1>
     <div id="charts-container">
+        <!-- Categories and their charts will be dynamically inserted here -->
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Object to hold chart instances
-            const charts = {};
+            // Object to hold chart instances organized by category
+            const categories = {};
 
-            // Function to create a new chart for a given name
-            function createChartForName(name) {
-                console.log(`Creating chart for name: ${name}`);
+            /**
+             * Function to create a new chart within a specified category.
+             * @param {string} category - The name of the category.
+             * @param {string} name - The name of the chart.
+             */
+            function createChartForName(category, name) {
+                console.log(`Creating chart "${name}" under category "${category}"`);
 
-                // Create a container for the chart
-                const container = document.createElement('div');
-                container.className = 'chart-container';
+                // Ensure the category section exists
+                let categorySection = categories[category]?.section;
+                if (!categorySection) {
+                    // Create a <details> element for the category
+                    categorySection = document.createElement('details');
+                    categorySection.className = 'category-section';
+
+                    // Create a <summary> element for the category name
+                    const summary = document.createElement('summary');
+                    summary.textContent = category;
+                    categorySection.appendChild(summary);
+
+                    // Create a container for all charts under this category
+                    const chartsContainer = document.createElement('div');
+                    chartsContainer.className = 'charts-wrapper';
+                    categorySection.appendChild(chartsContainer);
+
+                    // Append the category section to the main charts container
+                    const mainChartsContainer = document.getElementById('charts-container');
+                    if (!mainChartsContainer) {
+                        console.error('Main charts container not found in the DOM.');
+                        return;
+                    }
+                    mainChartsContainer.appendChild(categorySection);
+
+                    // Initialize the category in the categories object
+                    categories[category] = {
+                        section: categorySection,
+                        charts: {}
+                    };
+                }
+
+                // Check if the chart already exists within the category
+                if (categories[category].charts[name]) {
+                    console.warn(`Chart "${name}" already exists under category "${category}".`);
+                    return;
+                }
+
+                // Create a container for the individual chart
+                const chartContainer = document.createElement('div');
+                chartContainer.className = 'chart-container';
+
+                // Optional: Add a title for the chart
+                const chartTitle = document.createElement('div');
+                chartTitle.className = 'chart-title';
+                chartTitle.textContent = name;
+                chartContainer.appendChild(chartTitle);
 
                 // Create a canvas element for the chart
                 const canvas = document.createElement('canvas');
-                container.appendChild(canvas);
+                chartContainer.appendChild(canvas);
 
-                // Append the container to the main charts container
-                const chartsContainer = document.getElementById('charts-container');
-                if (!chartsContainer) {
-                    console.error('Charts container not found in the DOM.');
-                    return;
-                }
-                chartsContainer.appendChild(container);
+                // Append the chart container to the category's charts wrapper
+                const chartsWrapper = categorySection.querySelector('.charts-wrapper');
+                chartsWrapper.appendChild(chartContainer);
 
                 // Initialize chart data
                 const chartData = {
@@ -47,7 +223,8 @@
                     datasets: [{
                         label: name,
                         data: [],
-                        borderColor: 'rgb(75, 192, 192)',
+                        borderColor: getRandomColor(),
+                        backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
                         tension: 0.1
                     }]
                 };
@@ -59,6 +236,16 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                            },
+                            title: {
+                                display: false,
+                                text: name
+                            }
+                        },
                         scales: {
                             x: {
                                 title: {
@@ -67,10 +254,11 @@
                                 }
                             },
                             y: {
-                                // title: {
-                                //     display: true,
-                                //     text: name
-                                // }
+                                title: {
+                                    display: true,
+                                    text: 'Value'
+                                },
+                                beginAtZero: true
                             }
                         }
                     }
@@ -79,18 +267,20 @@
                 // Create the chart
                 try {
                     const chart = new Chart(canvas, config);
-                    // Store the chart and its data
-                    charts[name] = {
+                    // Store the chart and its data under the category
+                    categories[category].charts[name] = {
                         chart: chart,
                         data: chartData
                     };
-                    console.log(`Chart for "${name}" created and stored.`);
+                    console.log(`Chart "${name}" under category "${category}" created and stored.`);
                 } catch (error) {
-                    console.error(`Error creating chart for "${name}":`, error);
+                    console.error(`Error creating chart "${name}" under category "${category}":`, error);
                 }
             }
 
-            // Fetch initial data and populate charts
+            /**
+             * Fetch initial data and populate charts.
+             */
             async function fetchData() {
                 try {
                     const response = await fetch('/data');
@@ -98,67 +288,98 @@
                         throw new Error('Network response was not ok');
                     }
                     const data = await response.json();
-                    console.log('Data received:', data);
 
-                    // Process data and create/update charts
+                    // Process each log entry
                     data.forEach(entry => {
+                        const category = entry.category;
                         const name = entry.name;
-                        console.log('Processing entry:', entry);
 
-                        if (!charts[name]) {
-                            // Create a new chart for this name
-                            console.log(`Chart for "${name}" not found. Creating new chart.`);
-                            createChartForName(name);
+                        if (!category || !name) {
+                            console.warn('Log entry missing category or name:', entry);
+                            return;
+                        }
+
+                        // Create the chart if it doesn't exist
+                        if (!categories[category]?.charts[name]) {
+                            console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
+                            createChartForName(category, name);
                         }
 
                         // Update chart data
-                        const chartInfo = charts[name];
-                        console.log('chartInfo:', chartInfo);
-
+                        const chartInfo = categories[category]?.charts[name];
                         if (!chartInfo) {
-                            console.error(`chartInfo is undefined for name: ${name}`);
-                        } else {
-                            chartInfo.data.labels.push(entry.step);
-                            chartInfo.data.datasets[0].data.push(entry.value_double || entry.value);
-                            chartInfo.chart.update();
+                            console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
+                            return;
                         }
+
+                        chartInfo.data.labels.push(entry.step);
+                        chartInfo.data.datasets[0].data.push(entry.value_double || entry.value);
+                        chartInfo.chart.update();
                     });
                 } catch (error) {
                     console.error('Error fetching data:', error);
                 }
             }
 
-            // Setup WebSocket to receive real-time updates
+            /**
+             * Setup WebSocket to receive real-time updates.
+             */
             function setupWebSocket() {
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
                 const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+
                 ws.onmessage = function(event) {
                     const logEntry = JSON.parse(event.data);
                     console.log('WebSocket message received:', logEntry);
+
+                    const category = logEntry.category;
                     const name = logEntry.name;
 
-                    if (!charts[name]) {
-                        // Create a new chart for this name
-                        console.log(`Chart for "${name}" not found. Creating new chart.`);
-                        createChartForName(name);
+                    if (!category || !name) {
+                        console.warn('WebSocket log entry missing category or name:', logEntry);
+                        return;
+                    }
+
+                    // Create the chart if it doesn't exist
+                    if (!categories[category]?.charts[name]) {
+                        console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
+                        createChartForName(category, name);
                     }
 
                     // Update chart data
-                    const chartInfo = charts[name];
-                    console.log('chartInfo:', chartInfo);
-
+                    const chartInfo = categories[category]?.charts[name];
                     if (!chartInfo) {
-                        console.error(`chartInfo is undefined for name: ${name}`);
-                    } else {
-                        chartInfo.data.labels.push(logEntry.step);
-                        chartInfo.data.datasets[0].data.push(logEntry.value_double || logEntry.value);
-                        chartInfo.chart.update();
+                        console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
+                        return;
                     }
+
+                    chartInfo.data.labels.push(logEntry.step);
+                    chartInfo.data.datasets[0].data.push(logEntry.value_double || logEntry.value);
+                    chartInfo.chart.update();
                 };
+
                 ws.onclose = function(event) {
                     console.log('WebSocket closed. Reconnecting...');
                     setTimeout(setupWebSocket, 1000);
                 };
+
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                    ws.close();
+                };
+            }
+
+            /**
+             * Utility function to generate a random color for chart lines.
+             * Ensures that each chart has a distinct color.
+             */
+            function getRandomColor() {
+                const letters = '0123456789ABCDEF';
+                let color = '#';
+                for (let i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
             }
 
             // Initialize the dashboard
@@ -166,6 +387,5 @@
             setupWebSocket();
         });
     </script>
-
 </body>
 </html>
