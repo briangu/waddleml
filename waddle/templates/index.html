@@ -17,92 +17,159 @@
 </head>
 <body>
     <h1>Waddle Dashboard</h1>
-    <div id="chart-container">
-        <canvas id="chart"></canvas>
+    <div id="charts-container">
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        const chartData = {
-            labels: [],
-            datasets: [{
-                label: 'Loss',
-                data: [],
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-            }]
-        };
+        document.addEventListener('DOMContentLoaded', function() {
+            // Object to hold chart instances
+            const charts = {};
 
-        const config = {
-            type: 'line',
-            data: chartData,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Step'
-                        }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Loss'
+            // Function to create a new chart for a given name
+            function createChartForName(name) {
+                console.log(`Creating chart for name: ${name}`);
+
+                // Create a container for the chart
+                const container = document.createElement('div');
+                container.className = 'chart-container';
+
+                // Create a canvas element for the chart
+                const canvas = document.createElement('canvas');
+                container.appendChild(canvas);
+
+                // Append the container to the main charts container
+                const chartsContainer = document.getElementById('charts-container');
+                if (!chartsContainer) {
+                    console.error('Charts container not found in the DOM.');
+                    return;
+                }
+                chartsContainer.appendChild(container);
+
+                // Initialize chart data
+                const chartData = {
+                    labels: [],
+                    datasets: [{
+                        label: name,
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    }]
+                };
+
+                // Chart configuration
+                const config = {
+                    type: 'line',
+                    data: chartData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Step'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: name
+                                }
+                            }
                         }
                     }
+                };
+
+                // Create the chart
+                try {
+                    const chart = new Chart(canvas, config);
+                    // Store the chart and its data
+                    charts[name] = {
+                        chart: chart,
+                        data: chartData
+                    };
+                    console.log(`Chart for "${name}" created and stored.`);
+                } catch (error) {
+                    console.error(`Error creating chart for "${name}":`, error);
                 }
             }
-        };
 
-        const myChart = new Chart(
-            document.getElementById('chart'),
-            config
-        );
-
-        async function fetchData() {
-            try {
-                const response = await fetch('/data');
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                const data = await response.json();
-                console.log('Data received:', data);
-                // Process data and create charts
-                data.forEach(entry => {
-                    if (entry.name === 'loss') {
-                        chartData.labels.push(entry.step);
-                        chartData.datasets[0].data.push(entry.value_double);
+            // Fetch initial data and populate charts
+            async function fetchData() {
+                try {
+                    const response = await fetch('/data');
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
                     }
-                });
-                myChart.update();
-            } catch (error) {
-                console.error('Error fetching data:', error);
-            }
-        }
+                    const data = await response.json();
+                    console.log('Data received:', data);
 
-        function setupWebSocket() {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
-            ws.onmessage = function(event) {
-                const logEntry = JSON.parse(event.data);
-                console.log(logEntry);
-                if (logEntry.name === 'loss') {
-                    chartData.labels.push(logEntry.step);
-                    chartData.datasets[0].data.push(logEntry.value);
-                    myChart.update();
+                    // Process data and create/update charts
+                    data.forEach(entry => {
+                        const name = entry.name;
+                        console.log('Processing entry:', entry);
+
+                        if (!charts[name]) {
+                            // Create a new chart for this name
+                            console.log(`Chart for "${name}" not found. Creating new chart.`);
+                            createChartForName(name);
+                        }
+
+                        // Update chart data
+                        const chartInfo = charts[name];
+                        console.log('chartInfo:', chartInfo);
+
+                        if (!chartInfo) {
+                            console.error(`chartInfo is undefined for name: ${name}`);
+                        } else {
+                            chartInfo.data.labels.push(entry.step);
+                            chartInfo.data.datasets[0].data.push(entry.value_double || entry.value);
+                            chartInfo.chart.update();
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error fetching data:', error);
                 }
-            };
-            ws.onclose = function(event) {
-                console.log('WebSocket closed. Reconnecting...');
-                setTimeout(setupWebSocket, 1000);
-            };
-        }
+            }
 
-        window.onload = function() {
+            // Setup WebSocket to receive real-time updates
+            function setupWebSocket() {
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+                ws.onmessage = function(event) {
+                    const logEntry = JSON.parse(event.data);
+                    console.log('WebSocket message received:', logEntry);
+                    const name = logEntry.name;
+
+                    if (!charts[name]) {
+                        // Create a new chart for this name
+                        console.log(`Chart for "${name}" not found. Creating new chart.`);
+                        createChartForName(name);
+                    }
+
+                    // Update chart data
+                    const chartInfo = charts[name];
+                    console.log('chartInfo:', chartInfo);
+
+                    if (!chartInfo) {
+                        console.error(`chartInfo is undefined for name: ${name}`);
+                    } else {
+                        chartInfo.data.labels.push(logEntry.step);
+                        chartInfo.data.datasets[0].data.push(logEntry.value_double || logEntry.value);
+                        chartInfo.chart.update();
+                    }
+                };
+                ws.onclose = function(event) {
+                    console.log('WebSocket closed. Reconnecting...');
+                    setTimeout(setupWebSocket, 1000);
+                };
+            }
+
+            // Initialize the dashboard
             fetchData();
             setupWebSocket();
-        };
+        });
     </script>
+
 </body>
 </html>

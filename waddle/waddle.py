@@ -13,10 +13,9 @@ from datetime import datetime
 from pynvml import *
 from typing import Any, Dict, Optional
 import uuid
-import requests
 
 class WaddleLogger:
-    def __init__(self, db_root, project, id=None, config=None, use_gpu_metrics=True, mode='solo', server_url=None):
+    def __init__(self, db_root, project, id=None, config=None, use_gpu_metrics=True, server_url=None):
         self.db_root = db_root
         self.project = project
         self.id = id or datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -24,14 +23,10 @@ class WaddleLogger:
         os.makedirs(self.log_folder, exist_ok=True)
         self.config: argparse.Namespace = config
         self.use_gpu_metrics = use_gpu_metrics
-        self.mode = mode
-        self.server_url = server_url  # URL of the central server in distributed mode
+        self.server_url = server_url
 
         # Log initial system, CLI parameters, and code
         self.log_run_info()
-
-        if self.mode == 'distributed' and not self.server_url:
-            raise ValueError("In distributed mode, server_url must be specified.")
 
     def log_run_info(self):
         # Get system information
@@ -67,19 +62,10 @@ class WaddleLogger:
             'timestamp': datetime.now().isoformat()
         }
 
-        if self.mode == 'solo':
-            # Write run_info to a file in the log folder
-            run_info_file = os.path.join(self.log_folder, 'run_info.json')
-            with open(run_info_file, 'w') as f:
-                json.dump(run_info, f)
-        elif self.mode == 'distributed':
-            # Send run_info to the central server
-            try:
-                response = requests.post(f"{self.server_url}/ingest", json={'run_info': run_info})
-                if response.status_code != 200:
-                    print(f"Error sending run_info: {response.text}")
-            except Exception as e:
-                print(f"Error sending run_info: {e}")
+        # Write run_info to a file in the log folder
+        run_info_file = os.path.join(self.log_folder, 'run_info.json')
+        with open(run_info_file, 'w') as f:
+            json.dump(run_info, f)
 
     def get_git_commit_hash(self):
         """
@@ -138,25 +124,16 @@ class WaddleLogger:
                 'value': value,
                 'timestamp': timestamp
             }
-            if self.mode == 'solo':
-                # Write to local folder
-                filename = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
-                temp_filename = f"{filename}.tmp"
-                filepath = os.path.join(self.log_folder, temp_filename)
-                # Write to a temporary file
-                with open(filepath, 'w') as f:
-                    json.dump(log_entry, f)
-                # Rename to the final filename to ensure atomicity
-                final_filepath = os.path.join(self.log_folder, filename)
-                os.rename(filepath, final_filepath)
-            elif self.mode == 'distributed':
-                # Send via REST API to the central server
-                try:
-                    response = requests.post(f"{self.server_url}/ingest", json=log_entry)
-                    if response.status_code != 200:
-                        print(f"Error sending log entry: {response.text}")
-                except Exception as e:
-                    print(f"Error sending log entry: {e}")
+            # Write to local folder
+            filename = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
+            temp_filename = f"{filename}.tmp"
+            filepath = os.path.join(self.log_folder, temp_filename)
+            # Write to a temporary file
+            with open(filepath, 'w') as f:
+                json.dump(log_entry, f)
+            # Rename to the final filename to ensure atomicity
+            final_filepath = os.path.join(self.log_folder, filename)
+            os.rename(filepath, final_filepath)
 
     def log_gpu_metrics_periodically(self, interval=60):
         """
@@ -186,9 +163,11 @@ def _assign_config(app_config):
     global config
     config = app_config
 
-def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metrics_interval=60, mode='solo', server_url=None, server_port=8000, server_bind="127.0.0.1"):
+def init(project, log_root='.waddle/logs', config=None, use_gpu_metrics=True, gpu_metrics_interval=60, server_url=None, server_port=8000, server_bind="127.0.0.1"):
     global run
     global server_process
+
+    os.makedirs(log_root, exist_ok=True)
 
     # Assign the passed config to the global config
     config = config or argparse.Namespace()
@@ -202,18 +181,18 @@ def init(project, db_root='.waddle', config=None, use_gpu_metrics=True, gpu_metr
             print(f"Could not initialize NVML: {e}")
             use_gpu_metrics = False
 
-    if mode == 'solo':
+    if server_url is None:
         # Start the waddle server as a subprocess
-        server_cmd = ['waddle', '--mode', 'server', '--server-port', str(server_port), '--server-bind', server_bind, '--db-root', db_root, '--project', project, '--watch-folder', os.path.join(db_root, project)]
+        server_cmd = ['waddle', '--mode', 'server', '--server-port', str(server_port), '--server-bind', server_bind, '--db-root', log_root, '--project', project, '--watch-folder', os.path.join(log_root, project)]
         server_process = subprocess.Popen(server_cmd)
         # Allow the server some time to start
         time.sleep(2)
         server_url = 'http://localhost:8000'
-    elif mode == 'distributed':
+    else:
         if not server_url:
             raise ValueError("In distributed mode, server_url must be specified.")
 
-    run = WaddleLogger(db_root=db_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config, mode=mode, server_url=server_url)
+    run = WaddleLogger(db_root=log_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config, server_url=server_url)
 
     print("Waddle Logger initialized.")
     print("Run ID:", run.id)

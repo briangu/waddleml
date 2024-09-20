@@ -61,12 +61,13 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 class WaddleServer:
-    def __init__(self, db_root, project, watch_folder=None, loop=None):
+    def __init__(self, db_root, project, watch_folder=None, loop=None, watch_delay=10):
         self.db_root = db_root
         self.project = project
         self.db_path = os.path.join(db_root, f"{project}.db")
         self.watch_folder = watch_folder
         self.loop = loop
+        self.watch_delay = watch_delay
 
         self.con = duckdb.connect(self.db_path)
 
@@ -115,45 +116,33 @@ class WaddleServer:
     def watch_folder_for_logs(self):
         try:
             while self.watching:
-                log_folders = glob.glob(os.path.join(self.watch_folder, '*'))
+                logger.info(f"{time.time()} Watching folder for logs...")
+
+                # Get all directories recursively
+                log_folders = glob.glob(os.path.join(self.watch_folder, '**'), recursive=True)
+                log_folders = [f for f in log_folders if os.path.isdir(f)]
 
                 for log_folder in log_folders:
-                    run_id = os.path.basename(log_folder)
-                    run_info_file = os.path.join(log_folder, 'run_info.json')
-                    if os.path.exists(run_info_file):
-                        # Read run_info and insert into the database if not already inserted
-                        try:
-                            self.con.execute("SELECT 1 FROM run_info WHERE id = ?", (run_id,))
-                            if not self.con.fetchall():
-                                with open(run_info_file, 'r') as f:
-                                    run_info = json.load(f)
-                                # Insert into run_info table
-                                self.con.execute('''
-                                    INSERT INTO run_info VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ''', (
-                                    run_info['id'], run_info['start_time'], run_info['cli_params'], run_info['python_version'],
-                                    run_info['os_info'], run_info['cpu_info'], run_info['total_memory'], run_info['gpu_info'],
-                                    run_info['code'].encode('utf-8'), run_info['git_hash'], run_info['timestamp']
-                                ))
-                        except Exception as e:
-                            logger.error(f"Error inserting run_info for {run_id}: {e}")
+                    logger.info(f"Processing log folder: {log_folder}")
 
-                    # Process log entries
-                    log_files = glob.glob(os.path.join(log_folder, '*.json'))
+                    # Process log entries recursively
+                    log_files = glob.glob(os.path.join(log_folder, '**', '*.json'), recursive=True)
                     for log_file in log_files:
-                        if os.path.basename(log_file) == 'run_info.json':
-                            continue
                         try:
+                            logging.info(f"Processing log file: {log_file}")
                             with open(log_file, 'r') as f:
                                 log_entry = json.load(f)
-                            # Ingest log entry
-                            self.ingest_log_entry(log_entry)
+                            if os.path.basename(log_file) == 'run_info.json':
+                                self.ingest_log_entry({'run_info': log_entry})
+                            else:
+                                # Ingest log entry
+                                self.ingest_log_entry(log_entry)
                             # Delete the log file after processing
                             os.remove(log_file)
                         except Exception as e:
                             logger.error(f"Error processing log file {log_file}: {e}")
 
-                time.sleep(1)  # Sleep for a short time before checking again
+                time.sleep(self.watch_delay)
         except Exception as e:
             logger.error(f"Error in watch_folder_for_logs: {e}")
 
