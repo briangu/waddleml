@@ -13,6 +13,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+import pandas as pd
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -217,14 +219,30 @@ async def ingest_log(log_entry: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
+    float_cols = df.select_dtypes(include=['float', 'double']).columns
+    for col in float_cols:
+        df[col] = df[col].apply(lambda x: x if isinstance(x, float) and math.isfinite(x) else None)
+    #convert timestamps to ISO format
+    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%dT%H:%M:%S')
+    print(df)
+    del df['value_blob']  # Remove the blob column
+    return df
+
 @app.get("/data")
-async def get_data():
+async def get_data(history: int = 1000):
+    history = min(max(history, 1), 1000)  # Limit history to between 1 and 1000
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
         df = waddle_server_instance.con.execute("SELECT * FROM logs").fetchdf()
-        return df.to_dict(orient='records')
+        df = sanitize_df(df)
+        df = df[-history:]
+        x = df.to_dict(orient='records')
+        return x
     except Exception as e:
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
