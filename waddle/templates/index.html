@@ -143,7 +143,7 @@
     </style>
 </head>
 <body>
-    <h1>Waddle Dashboard</h1>
+    <h1 id="dashboard-title">Waddle Dashboard</h1>
     <div id="charts-container">
         <!-- Categories and their charts will be dynamically inserted here -->
     </div>
@@ -222,7 +222,7 @@
                 };
 
                 // Initialize chart data
-                console.log(name, value_count);
+                // console.log(name, value_count);
                 if (value_count > 1) {
                     chartData.datasets = [];
                     for (let i = 0; i < value_count; i++) {
@@ -231,7 +231,7 @@
                             data: [],
                             borderColor: getRandomColor(),
                             backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
-                            tension: 0.1
+                            tension: 0
                         });
                     }
                 } else {
@@ -240,7 +240,7 @@
                         data: [],
                         borderColor: getRandomColor(),
                         backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
-                        tension: 0.1
+                        tension: 0
                     }];
                 }
 
@@ -298,12 +298,38 @@
              */
             async function fetchData() {
                 try {
-                    const response = await fetch('/data');
+                    // get the project info
+                    const project_response = await fetch('/info');
+                    if (!project_response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    let project_data = await project_response.json();
+                    if (Array.isArray(project_data)) {
+                        project_data = project_data[0];
+                    }
+                    console.log('Project data fetched:', project_data);
+
+                    // update the dashboard title
+                    const dashboardTitle = document.getElementById('dashboard-title');
+                    console.log(project_data.name);
+                    dashboardTitle.textContent = "Project: " + project_data.name;
+
+                    const project_runs = await fetch('/runs');
+                    if (!project_runs.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    let runs_data = await project_runs.json();
+                    console.log('Runs data fetched:', runs_data);
+
+                    // get the latest run
+                    latest_run = runs_data[0];
+
+                    const response = await fetch('/run/'+latest_run);
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
                     const data = await response.json();
-                    console.log('Initial data fetched:', data);
+                    // console.log('Initial data fetched:', data);
 
                     // Process each log entry
                     data.forEach(entry => {
@@ -359,7 +385,7 @@
 
                 ws.onmessage = function(event) {
                     const logEntry = JSON.parse(event.data);
-                    console.log('WebSocket message received:', logEntry);
+                    // console.log('WebSocket message received:', logEntry);
 
                     const category = logEntry.category;
                     const name = logEntry.name;

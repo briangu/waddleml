@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
 import math
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,20 @@ class WaddleServer:
         self.watch_delay = watch_delay
 
         self.con = duckdb.connect(self.db_path)
+
+        # add project info to the database
+        self.con.execute('''
+            CREATE TABLE IF NOT EXISTS project_info (
+                name VARCHAR,
+                description VARCHAR,
+                timestamp TIMESTAMP,
+                PRIMARY KEY (name)
+            );
+        ''')
+        # non-destructively add project info
+        self.con.execute('''
+            INSERT OR IGNORE INTO project_info VALUES (?, ?, ?)
+        ''', (project, None, datetime.now().isoformat()))
 
         # Create tables if they don't exist
         self.con.execute('''
@@ -229,21 +244,56 @@ def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
     del df['value_blob']  # Remove the blob column
     return df
 
-@app.get("/data")
-async def get_data(history: int = 2000):
-    history = min(max(history, 1), 2000)  # Limit history to between 1 and 1000
+@app.get("/info")
+async def get_info():
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        df = waddle_server_instance.con.execute("SELECT * FROM logs").fetchdf()
-        df = sanitize_df(df)
-        df = df[-history:]
-        x = df.to_dict(orient='records')
-        return x
+        df = waddle_server_instance.con.execute("SELECT * FROM project_info").fetchdf()
+        return df.to_dict(orient='records')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/runs")
+async def get_runs():
+    if not waddle_server_instance:
+        raise HTTPException(status_code=500, detail="Server not initialized")
+    try:
+        df = waddle_server_instance.con.execute("SELECT id,start_time FROM run_info ORDER BY start_time DESC").fetchdf()
+        return df.to_dict(orient='records')
     except Exception as e:
         import traceback
+        print(e)
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/run/{run_id}")
+async def get_run(run_id: str, history: int = 2000):
+    if not waddle_server_instance:
+        raise HTTPException(status_code=500, detail="Server not initialized")
+    try:
+        df = waddle_server_instance.con.execute("SELECT * FROM logs WHERE id = ?", (run_id,)).fetchdf()
+        df = sanitize_df(df)
+        df = df[-history:]
+        return df.to_dict(orient='records')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# @app.get("/data")
+# async def get_data(history: int = 2000):
+#     history = min(max(history, 1), 2000)  # Limit history to between 1 and 1000
+#     if not waddle_server_instance:
+#         raise HTTPException(status_code=500, detail="Server not initialized")
+#     try:
+#         df = waddle_server_instance.con.execute("SELECT * FROM logs").fetchdf()
+#         df = sanitize_df(df)
+#         df = df[-history:]
+#         x = df.to_dict(orient='records')
+#         return x
+#     except Exception as e:
+#         import traceback
+#         logger.error(traceback.format_exc())
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
