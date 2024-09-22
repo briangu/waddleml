@@ -158,7 +158,7 @@
              * @param {string} category - The name of the category.
              * @param {string} name - The name of the chart.
              */
-            function createChartForName(category, name) {
+            function createChartForName(category, name, value_count) {
                 console.log(`Creating chart "${name}" under category "${category}"`);
 
                 // Ensure the category section exists
@@ -217,17 +217,32 @@
                 const chartsWrapper = categorySection.querySelector('.charts-wrapper');
                 chartsWrapper.appendChild(chartContainer);
 
-                // Initialize chart data
                 const chartData = {
                     labels: [],
-                    datasets: [{
+                };
+
+                // Initialize chart data
+                console.log(name, value_count);
+                if (value_count > 1) {
+                    chartData.datasets = [];
+                    for (let i = 0; i < value_count; i++) {
+                        chartData.datasets.push({
+                            label: name + ' ' + i,
+                            data: [],
+                            borderColor: getRandomColor(),
+                            backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
+                            tension: 0.1
+                        });
+                    }
+                } else {
+                    chartData.datasets = [{
                         label: name,
                         data: [],
                         borderColor: getRandomColor(),
                         backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
                         tension: 0.1
-                    }]
-                };
+                    }];
+                }
 
                 // Chart configuration
                 const config = {
@@ -238,8 +253,8 @@
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: true,
-                                position: 'top',
+                                display: false,
+                                // position: 'top',
                             },
                             title: {
                                 display: false,
@@ -254,10 +269,10 @@
                                 }
                             },
                             y: {
-                                title: {
-                                    display: true,
-                                    text: 'Value'
-                                },
+                                // title: {
+                                //     display: true,
+                                //     text: 'Value'
+                                // },
                                 beginAtZero: true
                             }
                         }
@@ -303,7 +318,8 @@
                         // Create the chart if it doesn't exist
                         if (!categories[category]?.charts[name]) {
                             console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                            createChartForName(category, name);
+                            value_count = Array.isArray(entry.value) ? entry.value.length : 1;
+                            createChartForName(category, name, value_count);
                         }
 
                         // Update chart data
@@ -314,7 +330,19 @@
                         }
 
                         chartInfo.data.labels.push(entry.step);
-                        chartInfo.data.datasets[0].data.push(entry.value_double || entry.value);
+                        // if value is an array then add each value to the chart
+                        if (Array.isArray(entry.value)) {
+                            let i = 0
+                            entry.value.forEach(value => {
+                                chartInfo.data.datasets[i].data.push(value);
+                                i += 1;
+                            });
+                        } else if (entry.value_double) {
+                            chartInfo.data.datasets[0].data.push(entry.value_double);
+                        } else {
+                            chartInfo.data.datasets[0].data.push(entry.value);
+                        }
+                        // chartInfo.data.datasets[0].data.push(entry.value_double || entry.value);
                         chartInfo.chart.update();
                     });
                 } catch (error) {
@@ -331,7 +359,7 @@
 
                 ws.onmessage = function(event) {
                     const logEntry = JSON.parse(event.data);
-                    // console.log('WebSocket message received:', logEntry);
+                    console.log('WebSocket message received:', logEntry);
 
                     const category = logEntry.category;
                     const name = logEntry.name;
@@ -344,7 +372,9 @@
                     // Create the chart if it doesn't exist
                     if (!categories[category]?.charts[name]) {
                         console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                        createChartForName(category, name);
+                        // is the entry a vector?
+                        value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
+                        createChartForName(category, name, value_count);
                     }
 
                     // Update chart data
@@ -355,7 +385,17 @@
                     }
 
                     chartInfo.data.labels.push(logEntry.step);
-                    chartInfo.data.datasets[0].data.push(logEntry.value_double || logEntry.value);
+                    if (Array.isArray(logEntry.value)) {
+                        let i = 0;
+                        logEntry.value.forEach(value => {
+                            chartInfo.data.datasets[i].data.push(value);
+                            i += 1;
+                        });
+                    } else if (logEntry.value_double) {
+                        chartInfo.data.datasets[0].data.push(logEntry.value_double);
+                    } else {
+                        chartInfo.data.datasets[0].data.push(logEntry.value);
+                    }
                     chartInfo.chart.update();
                 };
 
