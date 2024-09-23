@@ -14,14 +14,62 @@
 
         body {
             font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+        }
+
+        /* Header styles */
+        #header {
+            display: flex;
+            align-items: center;
             padding: 20px;
             background-color: #f9f9f9;
         }
 
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
+        #project-logo {
+            max-height: 60px;
+            margin-right: 20px;
+        }
+
+        #dashboard-title {
             font-size: 2em;
+        }
+
+        /* Main container splits the page into sidebar and content */
+        #main-container {
+            display: flex;
+        }
+
+        /* Sidebar styles */
+        #sidebar {
+            width: 200px;
+            min-width: 200px;
+            background-color: #e0e0e0;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #sidebar ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #sidebar li {
+            margin-bottom: 10px;
+        }
+
+        #sidebar a {
+            text-decoration: none;
+            color: #333;
+        }
+
+        #sidebar a:hover {
+            text-decoration: underline;
+        }
+
+        /* Content area styles */
+        #content {
+            flex-grow: 1;
+            padding: 20px;
         }
 
         /* Main container for all charts */
@@ -110,6 +158,19 @@
 
         /* Responsive Adjustments */
         @media (max-width: 768px) {
+            #main-container {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                order: 2;
+            }
+
+            #content {
+                order: 1;
+            }
+
             .charts-wrapper {
                 flex-direction: column;
             }
@@ -122,7 +183,7 @@
         }
 
         @media (max-width: 480px) {
-            h1 {
+            #dashboard-title {
                 font-size: 1.5em;
             }
 
@@ -143,9 +204,19 @@
     </style>
 </head>
 <body>
-    <h1 id="dashboard-title">Waddle Dashboard</h1>
-    <div id="charts-container">
-        <!-- Categories and their charts will be dynamically inserted here -->
+    <div id="header">
+        <img src="static/waddleml_logo.jpg" alt="WaddleML Logo" id="project-logo">
+        <h1 id="dashboard-title">Waddle Dashboard</h1>
+    </div>
+    <div id="main-container">
+        <div id="sidebar">
+            <!-- Runs will be dynamically inserted here -->
+        </div>
+        <div id="content">
+            <div id="charts-container">
+                <!-- Categories and their charts will be dynamically inserted here -->
+            </div>
+        </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
@@ -153,13 +224,20 @@
             // Object to hold chart instances organized by category
             const categories = {};
 
+            // Keep track of the selected run
+            let project_data = null;
+            let project_runs = null;
+
+            let selectedRunId = null;
+            let latestRunId = null;
+
             /**
              * Function to create a new chart within a specified category.
              * @param {string} category - The name of the category.
              * @param {string} name - The name of the chart.
              */
             function createChartForName(category, name, value_count) {
-                console.log(`Creating chart "${name}" under category "${category}"`);
+                // console.log(`Creating chart "${name}" under category "${category}"`);
 
                 // Ensure the category section exists
                 let categorySection = categories[category]?.section;
@@ -222,7 +300,6 @@
                 };
 
                 // Initialize chart data
-                // console.log(name, value_count);
                 if (value_count > 1) {
                     chartData.datasets = [];
                     for (let i = 0; i < value_count; i++) {
@@ -254,7 +331,6 @@
                         plugins: {
                             legend: {
                                 display: false,
-                                // position: 'top',
                             },
                             title: {
                                 display: false,
@@ -269,10 +345,6 @@
                                 }
                             },
                             y: {
-                                // title: {
-                                //     display: true,
-                                //     text: 'Value'
-                                // },
                                 beginAtZero: true
                             }
                         }
@@ -287,54 +359,163 @@
                         chart: chart,
                         data: chartData
                     };
-                    console.log(`Chart "${name}" under category "${category}" created and stored.`);
+                    // console.log(`Chart "${name}" under category "${category}" created and stored.`);
                 } catch (error) {
                     console.error(`Error creating chart "${name}" under category "${category}":`, error);
                 }
             }
 
             /**
+             * Function to clear all existing charts and categories.
+             */
+            function clearCharts() {
+                // Destroy all existing charts
+                for (const category in categories) {
+                    const chartsInCategory = categories[category].charts;
+                    for (const chartName in chartsInCategory) {
+                        chartsInCategory[chartName].chart.destroy();
+                    }
+                }
+
+                // Clear the categories object
+                for (let category in categories) {
+                    delete categories[category];
+                }
+
+                // Clear the charts container in the DOM
+                const mainChartsContainer = document.getElementById('charts-container');
+                if (mainChartsContainer) {
+                    mainChartsContainer.innerHTML = '';
+                }
+            }
+
+            /**
+             * Function to populate the runs in the sidebar.
+             */
+            function populateRunsSidebar(runs_data) {
+                const sidebar = document.getElementById('sidebar');
+                if (!sidebar) {
+                    console.error('Sidebar container not found in the DOM.');
+                    return;
+                }
+                // Clear the sidebar
+                sidebar.innerHTML = '';
+
+                // Create a list or menu
+                const runsList = document.createElement('ul');
+                runsList.style.listStyleType = 'none';
+                runsList.style.padding = '0';
+
+                runs_data.forEach(run => {
+                    const runItem = document.createElement('li');
+                    runItem.style.marginBottom = '10px';
+
+                    const runLink = document.createElement('a');
+                    runLink.href = '#';
+                    runLink.textContent = 'Run: ' + run.start_time;
+                    runLink.dataset.runId = run.id;
+
+                    // Highlight the selected run
+                    if (run.id === selectedRunId) {
+                        runLink.style.fontWeight = 'bold';
+                    }
+
+                    // Add click event
+                    runLink.addEventListener('click', function(event) {
+                        event.preventDefault();
+                        // Clear existing charts and categories
+                        clearCharts();
+                        // Fetch data for the selected run
+                        fetchData(run.id);
+                    });
+
+                    runItem.appendChild(runLink);
+                    runsList.appendChild(runItem);
+                });
+
+                sidebar.appendChild(runsList);
+            }
+
+            /**
              * Fetch initial data and populate charts.
              */
-            async function fetchData() {
+            async function fetchData(runId) {
                 try {
-                    // get the project info
-                    const project_response = await fetch('/info');
-                    if (!project_response.ok) {
-                        throw new Error('Network response was not ok');
+                    if (project_data == null) {
+                        // get the project info
+                        let project_response = await fetch('/info');
+                        if (!project_response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        project_data = await project_response.json();
+                        if (Array.isArray(project_data)) {
+                            project_data = project_data[0];
+                        }
+                        console.log('Project data fetched:', project_data);
+                        // if project_data is undefined, then set to null and return
+                        if (project_data == undefined) {
+                            project_data = null;
+                            return;
+                        }
+
+                        // update the dashboard title
+                        const dashboardTitle = document.getElementById('dashboard-title');
+                        console.log(project_data.name);
+                        dashboardTitle.textContent = "Project: " + project_data.name;
                     }
-                    let project_data = await project_response.json();
-                    if (Array.isArray(project_data)) {
-                        project_data = project_data[0];
+
+                    if (project_runs == null) {
+                        // get the project runs
+                        project_runs = await fetch('/runs');
+                        if (!project_runs.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        project_runs = await project_runs.json();
+                        console.log('Runs data fetched:', project_runs);
                     }
-                    console.log('Project data fetched:', project_data);
 
-                    // update the dashboard title
-                    const dashboardTitle = document.getElementById('dashboard-title');
-                    console.log(project_data.name);
-                    dashboardTitle.textContent = "Project: " + project_data.name;
+                    latestRunId = project_runs[0].id;
 
-                    const project_runs = await fetch('/runs');
-                    if (!project_runs.ok) {
-                        throw new Error('Network response was not ok');
+                    // If runId is not provided, use the latest run
+                    if (!runId) {
+                        runId = latestRunId;
                     }
-                    let runs_data = await project_runs.json();
-                    console.log('Runs data fetched:', runs_data);
 
-                    // get the latest run
-                    latest_run = runs_data[0];
+                    // Update global variables
+                    selectedRunId = runId;
 
-                    const response = await fetch('/run/'+latest_run);
+                    // Populate the runs in the sidebar
+                    populateRunsSidebar(project_runs, runId);
+
+                    const response = await fetch('/run/' + runId);
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
                     const data = await response.json();
-                    // console.log('Initial data fetched:', data);
+                    console.log('Initial data fetched:', data);
+
+                    // if there's no data then update the ui to show that there's no data and return
+                    if (data.length == 0) {
+                        const mainChartsContainer = document.getElementById('charts-container');
+                        if (mainChartsContainer) {
+                            mainChartsContainer.innerHTML = '<p>No data available for this run.</p>';
+                        }
+                        return;
+                    }
 
                     // Process each log entry
                     data.forEach(entry => {
                         const category = entry.category;
                         const name = entry.name;
+
+                        // if value is a string then try to convert it to a json object
+                        if (typeof entry.value === 'string') {
+                            try {
+                                entry.value = JSON.parse(entry.value);
+                            } catch (error) {
+                                console.error('Error parsing log entry value:', error);
+                            }
+                        }
 
                         if (!category || !name) {
                             console.warn('Log entry missing category or name:', entry);
@@ -343,8 +524,8 @@
 
                         // Create the chart if it doesn't exist
                         if (!categories[category]?.charts[name]) {
-                            console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                            value_count = Array.isArray(entry.value) ? entry.value.length : 1;
+                            // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
+                            let value_count = Array.isArray(entry.value) ? entry.value.length : 1;
                             createChartForName(category, name, value_count);
                         }
 
@@ -358,17 +539,14 @@
                         chartInfo.data.labels.push(entry.step);
                         // if value is an array then add each value to the chart
                         if (Array.isArray(entry.value)) {
-                            let i = 0
+                            let i = 0;
                             entry.value.forEach(value => {
                                 chartInfo.data.datasets[i].data.push(value);
                                 i += 1;
                             });
-                        } else if (entry.value_double) {
-                            chartInfo.data.datasets[0].data.push(entry.value_double);
                         } else {
                             chartInfo.data.datasets[0].data.push(entry.value);
                         }
-                        // chartInfo.data.datasets[0].data.push(entry.value_double || entry.value);
                         chartInfo.chart.update();
                     });
                 } catch (error) {
@@ -384,11 +562,25 @@
                 const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
                 ws.onmessage = function(event) {
+                    // If the user is not viewing the latest run, ignore updates
+                    if (selectedRunId !== latestRunId) {
+                        return;
+                    }
+
                     const logEntry = JSON.parse(event.data);
                     // console.log('WebSocket message received:', logEntry);
 
                     const category = logEntry.category;
                     const name = logEntry.name;
+
+                    // if value is a string then try to convert it to a json object
+                    if (typeof logEntry.value === 'string') {
+                        try {
+                            logEntry.value = JSON.parse(logEntry.value);
+                        } catch (error) {
+                            console.error('Error parsing log entry value:', error);
+                        }
+                    }
 
                     if (!category || !name) {
                         console.warn('WebSocket log entry missing category or name:', logEntry);
@@ -397,9 +589,9 @@
 
                     // Create the chart if it doesn't exist
                     if (!categories[category]?.charts[name]) {
-                        console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
+                        // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
                         // is the entry a vector?
-                        value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
+                        let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
                         createChartForName(category, name, value_count);
                     }
 
@@ -417,8 +609,6 @@
                             chartInfo.data.datasets[i].data.push(value);
                             i += 1;
                         });
-                    } else if (logEntry.value_double) {
-                        chartInfo.data.datasets[0].data.push(logEntry.value_double);
                     } else {
                         chartInfo.data.datasets[0].data.push(logEntry.value);
                     }

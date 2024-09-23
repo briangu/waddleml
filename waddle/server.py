@@ -11,7 +11,7 @@ import logging
 import duckdb
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
 import math
@@ -234,15 +234,22 @@ async def ingest_log(log_entry: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
-    float_cols = df.select_dtypes(include=['float', 'double']).columns
-    for col in float_cols:
-        df[col] = df[col].apply(lambda x: x if isinstance(x, float) and math.isfinite(x) else None)
-    #convert timestamps to ISO format
-    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%dT%H:%M:%S')
-    print(df)
-    del df['value_blob']  # Remove the blob column
+    # coalesce the value_double and value_string columns into a value column
+    df['value'] = df['value_double'].combine_first(df['value_string'])
+
+    # drop the value_double and value_string columns
+    df = df.drop(columns=['value_double', 'value_string'])
+
+    # Convert timestamps to ISO format
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    df = df.sort_values(by='step')
+
     return df
+
 
 @app.get("/info")
 async def get_info():
@@ -272,11 +279,13 @@ async def get_run(run_id: str, history: int = 2000):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        df = waddle_server_instance.con.execute("SELECT * FROM logs WHERE id = ?", (run_id,)).fetchdf()
+        df = waddle_server_instance.con.execute("SELECT id,step,category,name,value_double,value_string,timestamp FROM logs WHERE id = ? ORDER BY step DESC LIMIT ?", (run_id,history,)).fetchdf()
         df = sanitize_df(df)
-        df = df[-history:]
         return df.to_dict(orient='records')
     except Exception as e:
+        import traceback
+        print(e)
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 # @app.get("/data")
@@ -298,6 +307,14 @@ async def get_run(run_id: str, history: int = 2000):
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+# get static assets
+@app.get("/static/{filename}")
+async def get_static(filename: str):
+    filename = os.path.basename(filename)
+    filepath = os.path.join(os.path.dirname(__file__), "static", filename)
+    return FileResponse(filepath)
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
