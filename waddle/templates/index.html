@@ -42,7 +42,6 @@
         /* Sidebar styles */
         #sidebar {
             width: 200px;
-            min-width: 200px;
             background-color: #e0e0e0;
             padding: 20px;
             overflow-y: auto;
@@ -163,12 +162,11 @@
             }
 
             #sidebar {
-                width: 100%;
-                order: 2;
+                display: none; /* Hide the sidebar on small screens */
             }
 
             #content {
-                order: 1;
+                width: 100%;
             }
 
             .charts-wrapper {

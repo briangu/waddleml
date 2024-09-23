@@ -237,7 +237,13 @@ async def ingest_log(log_entry: dict):
 
 def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
     # coalesce the value_double and value_string columns into a value column
-    df['value'] = df['value_double'].combine_first(df['value_string'])
+    # df['value'] = df['value_double'].combine_first(df['value_string'])
+
+    for i, row in df.iterrows():
+        if not math.isnan(row['value_double']):
+            df.at[i, 'value'] = row['value_double']
+        else:
+            df.at[i, 'value'] = row['value_string']
 
     # drop the value_double and value_string columns
     df = df.drop(columns=['value_double', 'value_string'])
@@ -275,13 +281,20 @@ async def get_runs():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/run/{run_id}")
-async def get_run(run_id: str, history: int = 2000):
+async def get_run(run_id: str, history: int = 10):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        df = waddle_server_instance.con.execute("SELECT id,step,category,name,value_double,value_string,timestamp FROM logs WHERE id = ? ORDER BY step DESC LIMIT ?", (run_id,history,)).fetchdf()
-        df = sanitize_df(df)
-        return df.to_dict(orient='records')
+        # first get the list of names
+        df = waddle_server_instance.con.execute("SELECT DISTINCT name FROM logs WHERE id = ?", (run_id,)).fetchdf()
+        # for each name then get the history of that name and collect it in a list
+        data = []
+        for name in df['name']:
+            df = waddle_server_instance.con.execute("SELECT id,step,category,name,value_double,value_string,timestamp FROM logs WHERE id = ? AND name = ? ORDER BY step DESC LIMIT ?", (run_id,name,history,)).fetchdf()
+            clean_df = sanitize_df(df).to_dict(orient='records')
+            data.extend(clean_df)
+        print(len(data))
+        return data
     except Exception as e:
         import traceback
         print(e)
