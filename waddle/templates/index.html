@@ -41,7 +41,7 @@
 
         /* Sidebar styles */
         #sidebar {
-            width: 200px;
+            min-width: 200px;
             background-color: #e0e0e0;
             padding: 20px;
             overflow-y: auto;
@@ -218,6 +218,21 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        /**
+         * Function to extract the number from a chart name.
+         * Assumes the chart name follows the pattern "x.<number>.y".
+         * @param {string} name - The name of the chart.
+         * @returns {number|null} - The extracted number or null if not found.
+         */
+        function extractNumberFromChartName(name) {
+            const match = name.match(/.*\.(\d+)\..*/);
+            if (match) {
+                return parseInt(match[1], 10);
+            } else {
+                return null;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Object to hold chart instances organized by category
             const categories = {};
@@ -291,7 +306,36 @@
 
                 // Append the chart container to the category's charts wrapper
                 const chartsWrapper = categorySection.querySelector('.charts-wrapper');
-                chartsWrapper.appendChild(chartContainer);
+
+                // Extract the number from the new chart's name
+                const newChartNumber = extractNumberFromChartName(name);
+
+                // Find the correct position to insert the new chart container
+                let inserted = false;
+                for (let i = 0; i < chartsWrapper.children.length; i++) {
+                    const existingChartContainer = chartsWrapper.children[i];
+                    const existingChartTitle = existingChartContainer.querySelector('.chart-title').textContent;
+                    const existingChartNumber = extractNumberFromChartName(existingChartTitle);
+
+                    if (newChartNumber !== null && existingChartNumber !== null) {
+                        // Compare the extracted numbers
+                        if (newChartNumber < existingChartNumber) {
+                            chartsWrapper.insertBefore(chartContainer, existingChartContainer);
+                            inserted = true;
+                            break;
+                        }
+                    } else {
+                        // Fallback to string comparison if numbers can't be extracted
+                        if (existingChartTitle.localeCompare(name) > 0) {
+                            chartsWrapper.insertBefore(chartContainer, existingChartContainer);
+                            inserted = true;
+                            break;
+                        }
+                    }
+                }
+                if (!inserted) {
+                    chartsWrapper.appendChild(chartContainer);
+                }
 
                 const chartData = {
                     labels: [],
@@ -472,8 +516,13 @@
                         console.log('Runs data fetched:', project_runs);
                     }
 
-                    latestRunId = project_runs[0].id;
-
+                    if (project_runs.length > 0) {
+                        latestRunId = project_runs[0].id;
+                    } else {
+                        console.error('No runs available.');
+                        // Handle the case when there are no runs, e.g., display a message or retry fetching
+                        return;
+                    }
                     // If runId is not provided, use the latest run
                     if (!runId) {
                         runId = latestRunId;

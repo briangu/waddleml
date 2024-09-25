@@ -240,7 +240,7 @@ def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
     # df['value'] = df['value_double'].combine_first(df['value_string'])
 
     for i, row in df.iterrows():
-        if not math.isnan(row['value_double']):
+        if not pd.isna(row['value_double']):
             df.at[i, 'value'] = row['value_double']
         else:
             df.at[i, 'value'] = row['value_string']
@@ -293,7 +293,7 @@ async def get_run(run_id: str, history: int = 10):
             df = waddle_server_instance.con.execute("SELECT id,step,category,name,value_double,value_string,timestamp FROM logs WHERE id = ? AND name = ? ORDER BY step DESC LIMIT ?", (run_id,name,history,)).fetchdf()
             clean_df = sanitize_df(df).to_dict(orient='records')
             data.extend(clean_df)
-        print(len(data))
+        logger.info(f"Returning {len(data)} records for run {run_id}")
         return data
     except Exception as e:
         import traceback
