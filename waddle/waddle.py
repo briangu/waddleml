@@ -118,6 +118,7 @@ class WaddleLogger:
         for name, value in data.items():
             log_entry = {
                 'id': self.id,
+                'project': self.project,
                 'step': step or 0,
                 'category': category,
                 'name': name,

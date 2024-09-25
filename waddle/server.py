@@ -273,6 +273,7 @@ async def get_runs():
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
         df = waddle_server_instance.con.execute("SELECT id,start_time FROM run_info ORDER BY start_time DESC").fetchdf()
+        df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
         return df.to_dict(orient='records')
     except Exception as e:
         import traceback
