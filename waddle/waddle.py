@@ -28,6 +28,9 @@ class WaddleLogger:
         # Log initial system, CLI parameters, and code
         self.log_run_info()
 
+    def _get_file_prefix(self):
+        return os.path.join(self.log_folder, f"{int(time.time() * 1000)}_{uuid.uuid4().hex}")
+
     def log_run_info(self):
         # Get system information
         python_version = sys.version
@@ -63,7 +66,7 @@ class WaddleLogger:
         }
 
         # Write run_info to a file in the log folder
-        run_info_file = os.path.join(self.log_folder, 'run_info.json')
+        run_info_file = os.path.join(self.log_folder, f'{self._get_file_prefix()}.run_info.json')
         with open(run_info_file, 'w') as f:
             json.dump(run_info, f)
 
@@ -126,7 +129,7 @@ class WaddleLogger:
                 'timestamp': timestamp
             }
             # Write to local folder
-            filename = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
+            filename = f"{self._get_file_prefix()}.json"
             temp_filename = f"{filename}.tmp"
             filepath = os.path.join(self.log_folder, temp_filename)
             # Write to a temporary file

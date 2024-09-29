@@ -14,7 +14,6 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Requ
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
-import math
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -149,8 +148,8 @@ class WaddleServer:
                             logging.info(f"Processing log file: {log_file}")
                             with open(log_file, 'r') as f:
                                 log_entry = json.load(f)
-                            if os.path.basename(log_file) == 'run_info.json':
-                                self.ingest_log_entry({'run_info': log_entry})
+                            if os.path.basename(log_file).endswith('.run_info.json'):
+                                self.ingest_run_info(log_entry)
                             else:
                                 # Ingest log entry
                                 self.ingest_log_entry(log_entry)
@@ -163,30 +162,32 @@ class WaddleServer:
         except Exception as e:
             logger.error(f"Error in watch_folder_for_logs: {e}")
 
+    def ingest_run_info(self, run_info):
+        run_id = run_info['id']
+        self.con.execute("SELECT 1 FROM run_info WHERE id = ?", (run_id,))
+        if not self.con.fetchall():
+            # Insert into run_info table
+            self.con.execute('''
+                INSERT INTO run_info VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                run_info['id'],
+                run_info['start_time'],
+                run_info['cli_params'],
+                run_info['python_version'],
+                run_info['os_info'],
+                run_info['cpu_info'],
+                run_info['total_memory'],
+                run_info['gpu_info'],
+                run_info['code'].encode('utf-8'),
+                run_info['git_hash'],
+                run_info['timestamp']
+            ))
+
     def ingest_log_entry(self, log_entry):
         try:
             # Handle run_info separately
             if 'run_info' in log_entry:
-                run_info = log_entry['run_info']
-                run_id = run_info['id']
-                self.con.execute("SELECT 1 FROM run_info WHERE id = ?", (run_id,))
-                if not self.con.fetchall():
-                    # Insert into run_info table
-                    self.con.execute('''
-                        INSERT INTO run_info VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        run_info['id'],
-                        run_info['start_time'],
-                        run_info['cli_params'],
-                        run_info['python_version'],
-                        run_info['os_info'],
-                        run_info['cpu_info'],
-                        run_info['total_memory'],
-                        run_info['gpu_info'],
-                        run_info['code'].encode('utf-8'),
-                        run_info['git_hash'],
-                        run_info['timestamp']
-                    ))
+                self.ingest_run_info(log_entry['run_info'])
                 return
 
             # Determine the type of the value and insert accordingly
