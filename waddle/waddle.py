@@ -29,7 +29,7 @@ class WaddleLogger:
         self.log_run_info()
 
     def _get_file_prefix(self):
-        return os.path.join(self.log_folder, f"{int(time.time() * 1000)}_{uuid.uuid4().hex}")
+        return f"{int(time.time() * 1000)}_{uuid.uuid4().hex}"
 
     def log_run_info(self):
         # Get system information
