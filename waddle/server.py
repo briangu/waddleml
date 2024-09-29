@@ -148,9 +148,6 @@ class WaddleServer:
                             logging.info(f"Processing log file: {log_file}")
                             with open(log_file, 'r') as f:
                                 log_entry = json.load(f)
-                            if os.path.basename(log_file).endswith('.run_info.json'):
-                                self.ingest_run_info(log_entry)
-                            else:
                                 # Ingest log entry
                                 self.ingest_log_entry(log_entry)
                             # Delete the log file after processing

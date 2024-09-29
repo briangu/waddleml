@@ -52,17 +52,19 @@ class WaddleLogger:
 
         # Prepare the run info dictionary
         run_info = {
-            'id': self.id,
-            'start_time': datetime.now().isoformat(),
-            'cli_params': cli_params_json,
-            'python_version': python_version,
-            'os_info': os_info,
-            'cpu_info': cpu_info,
-            'total_memory': total_memory,
-            'gpu_info': gpu_info,
-            'code': code_data.decode('utf-8'),
-            'git_hash': git_hash,
-            'timestamp': datetime.now().isoformat()
+            "run_info": {
+                'id': self.id,
+                'start_time': datetime.now().isoformat(),
+                'cli_params': cli_params_json,
+                'python_version': python_version,
+                'os_info': os_info,
+                'cpu_info': cpu_info,
+                'total_memory': total_memory,
+                'gpu_info': gpu_info,
+                'code': code_data.decode('utf-8'),
+                'git_hash': git_hash,
+                'timestamp': datetime.now().isoformat()
+            }
         }
 
         # Write run_info to a file in the log folder
