@@ -234,6 +234,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            let isInitialLoadComplete = false;
+
             // Object to hold chart instances organized by category
             const categories = {};
 
@@ -387,7 +389,7 @@
                                 }
                             },
                             y: {
-                                beginAtZero: true
+                                beginAtZero: false
                             }
                         }
                     }
@@ -596,6 +598,9 @@
                         }
                         chartInfo.chart.update();
                     });
+
+                    // Set initial load complete flag
+                    isInitialLoadComplete = true;
                 } catch (error) {
                     console.error('Error fetching data:', error);
                 }
@@ -610,7 +615,7 @@
 
                 ws.onmessage = function(event) {
                     // If the user is not viewing the latest run, ignore updates
-                    if (selectedRunId !== latestRunId) {
+                    if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
                         return;
                     }
 
