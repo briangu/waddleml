@@ -26,12 +26,11 @@ async def lifespan(app: FastAPI):
     global waddle_server_instance
     parser = argparse.ArgumentParser()
     parser.add_argument('--db-root', type=str, default='.waddle')
-    parser.add_argument('--project', type=str, default='experiment')
     parser.add_argument('--log-root', type=str, default=os.path.join('.waddle', 'logs'))
     args, _ = parser.parse_known_args()
 
     loop = asyncio.get_running_loop()
-    waddle_server_instance = WaddleServer(db_root=args.db_root, project=args.project, log_root=args.log_root, loop=loop)
+    waddle_server_instance = WaddleServer(db_root=args.db_root, log_root=args.log_root, loop=loop)
     yield
     if waddle_server_instance:
         waddle_server_instance.stop()
@@ -64,8 +63,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 class WaddleServer:
-    def __init__(self, db_root, project, log_root=None, loop=None, watch_delay=10):
-        self.project = project
+    def __init__(self, db_root, log_root=None, loop=None, watch_delay=10):
         self.db_path = os.path.join(db_root, f"waddle.db")
         self.log_root = log_root or os.path.join(db_root, "logs")
         self.loop = loop
@@ -84,9 +82,6 @@ class WaddleServer:
                 UNIQUE (name)
             );
         ''')
-
-        # insert the default project info
-        self.con.execute('INSERT OR IGNORE INTO project_info (name, timestamp, data) VALUES (?, ?, ?)', (project, datetime.now(), {}))
 
         # Create tables if they don't exist
         self.con.execute('''
