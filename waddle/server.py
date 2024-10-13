@@ -159,7 +159,7 @@ class WaddleServer:
 
     def _insert_project_info(self, project_info):
         self.con.execute("SELECT id FROM project_info WHERE name = ?", (project_info['name'],))
-        project_id = self.con.fetchall()
+        project_id = self.con.fetchone()
         if not project_id:
             self.con.execute('INSERT INTO project_info (name, timestamp, data) VALUES (?, ?, ?)', (
                 project_info['name'],
@@ -168,24 +168,24 @@ class WaddleServer:
             ))
             project_id = self.con.execute("SELECT currval('seq_project_info')").fetchone()[0]
         else:
-            project_id = project_id[0][0]
+            project_id = project_id[0]
         return project_id
 
     def _insert_run_info(self, project_id, run_info):
-        run_name = run_info['name']
-        self.con.execute("SELECT id FROM run_info WHERE project_id =? AND name = ?", (project_id, run_name,))
-        run_id = self.con.fetchall()
+        run_name = run_info.get('name') or run_info.get('id')
+        self.con.execute("SELECT id FROM run_info WHERE project_id = ? AND name = ?", (project_id, run_name,))
+        run_id = self.con.fetchone()
         if not run_id:
             # Insert into run_info table
             self.con.execute('INSERT INTO run_info (project_id, name, start_time, data) VALUES (?, ?, ?, ?)', (
                 project_id,
-                run_info['name'],
-                run_info['start_time'],
+                run_name,
+                run_info.get('start_time') or run_info.get('timestamp') or datetime.now(),
                 run_info,
             ))
             run_id = self.con.execute("SELECT currval('seq_run_info')").fetchone()[0]
         else:
-            run_id = run_id[0][0]
+            run_id = run_id[0]
         return run_id
 
     def _insert_log_entry(self, run_id, log_entry):
@@ -200,22 +200,12 @@ class WaddleServer:
         log_id = self.con.execute("SELECT currval('seq_logs')").fetchone()[0]
         return log_id
 
-    def _parse_scoped_run_name(self, run_name):
-        run_name = run_name.split('/')
-        if len(run_name) == 1:
-            project_name = "default"
-            run_name = run_name[0]
-        elif len(run_name) == 2:
-            project_name, run_name = run_name
-        else:
-            raise ValueError(f"Invalid run name: {run_name}")
-        return project_name, run_name
-
     @lru_cache
-    def _resolve_project_and_run(self, project_name, run_name):
+    def _resolve_project_and_run(self, project_name, run_name, timestamp=None):
+        timestamp = timestamp or datetime.now()
         # Resolve project and run names into IDs and insert into the database if not already present
-        project_id = self._insert_project_info({"name": project_name, "timestamp": datetime.now()})
-        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": datetime.now()})
+        project_id = self._insert_project_info({"name": project_name, "timestamp": timestamp})
+        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": timestamp})
         return project_id, run_id
 
     def _ingest_log_entry(self, log_entry):
@@ -224,14 +214,14 @@ class WaddleServer:
             if 'run_info' in log_entry:
                 run_info = log_entry['run_info']
                 project_name = run_info['project']
-                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info['start_time']})
+                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info.get('start_time') or run_info.get('timestamp') or datetime.now()})
                 self._insert_run_info(project_id, log_entry['run_info'])
                 return
 
             # Resolve project and run names into IDs and insert into the database if not already present
-            scoped_run_name = log_entry.get('run') or log_entry.get('id')
-            project_name, run_name = self._parse_scoped_run_name(scoped_run_name)
-            project_id, run_id = self._resolve_project_and_run(project_name, run_name)
+            run_name = log_entry.get('run') or log_entry.get('id') or log_entry.get('run_id')
+            project_name = log_entry.get('project') or "default"
+            project_id, run_id = self._resolve_project_and_run(project_name, run_name, log_entry.get('timestamp'))
             log_id = self._insert_log_entry(run_id, log_entry)
             if 'run_name' in log_entry:
                 del log_entry['run_name']
@@ -243,6 +233,7 @@ class WaddleServer:
             asyncio.run_coroutine_threadsafe(manager.broadcast(log_entry), self.loop)
 
         except Exception as e:
+            print("Error ingesting log entry:", log_entry)
             import traceback
             traceback.print_exc()
             logger.error(f"Error ingesting log entry: {e}")
@@ -263,14 +254,14 @@ def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
     # coalesce the value_double and value_string columns into a value column
     # df['value'] = df['value_double'].combine_first(df['value_string'])
 
-    for i, row in df.iterrows():
-        if not pd.isna(row['value_double']):
-            df.at[i, 'value'] = row['value_double']
-        else:
-            df.at[i, 'value'] = row['value_string']
+    # for i, row in df.iterrows():
+    #     if not pd.isna(row['value_double']):
+    #         df.at[i, 'value'] = row['value_double']
+    #     else:
+    #         df.at[i, 'value'] = row['value_string']
 
     # drop the value_double and value_string columns
-    df = df.drop(columns=['value_double', 'value_string'])
+    # df = df.drop(columns=['value_double', 'value_string'])
 
     # Convert timestamps to ISO format
     if 'timestamp' in df.columns:
@@ -291,12 +282,12 @@ async def get_info():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/runs")
-async def get_runs():
+@app.get("/projects/{project_id}/runs")
+async def get_runs(project_id: int):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        df = waddle_server_instance.con.execute("SELECT id,start_time,data FROM run_info ORDER BY start_time DESC").fetchdf()
+        df = waddle_server_instance.con.execute("SELECT id,project_id,start_time,data,(SELECT COUNT(id) FROM logs WHERE run_id=id) as rows FROM run_info WHERE project_id = ? AND rows > 0 ORDER BY start_time DESC", (project_id,)).fetchdf()
         df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
         return df.to_dict(orient='records')
     except Exception as e:
@@ -305,17 +296,17 @@ async def get_runs():
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/run/{run_id}")
-async def get_run(run_id: str, history: int = 10):
+@app.get("/projects/{project_id}/runs/{run_id}")
+async def get_run(project_id: int, run_id: int, history: int = 10):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
         # first get the list of names
-        df = waddle_server_instance.con.execute("SELECT DISTINCT name FROM logs WHERE id = ?", (run_id,)).fetchdf()
+        df = waddle_server_instance.con.execute("SELECT DISTINCT name FROM logs WHERE run_id = ?", (run_id,)).fetchdf()
         # for each name then get the history of that name and collect it in a list
         data = []
         for name in df['name']:
-            df = waddle_server_instance.con.execute("SELECT id,step,category,name,value_double,value_string,timestamp FROM logs WHERE id = ? AND name = ? ORDER BY step DESC LIMIT ?", (run_id,name,history,)).fetchdf()
+            df = waddle_server_instance.con.execute("SELECT * FROM logs WHERE run_id = ? AND name = ? ORDER BY step DESC LIMIT ?", (run_id,name,history,)).fetchdf()
             clean_df = sanitize_df(df).to_dict(orient='records')
             data.extend(clean_df)
         logger.info(f"Returning {len(data)} records for run {run_id}")

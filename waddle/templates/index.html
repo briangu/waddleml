@@ -510,7 +510,7 @@
 
                     if (project_runs == null) {
                         // get the project runs
-                        project_runs = await fetch('/runs');
+                        project_runs = await fetch('/projects/'+project_data.id+'/runs');
                         if (!project_runs.ok) {
                             throw new Error('Network response was not ok');
                         }
@@ -536,7 +536,7 @@
                     // Populate the runs in the sidebar
                     populateRunsSidebar(project_runs, runId);
 
-                    const response = await fetch('/run/' + runId);
+                    const response = await fetch('/projects/'+project_data.id+'/runs/' + runId);
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
@@ -624,6 +624,23 @@
 
                     const category = logEntry.category;
                     const name = logEntry.name;
+
+                    /*
+                        Data may come in one of a variety of fields:
+
+                        if isinstance(value, (int, float)):
+                            log_entry['value_double'] = value
+                        elif isinstance(value, bool):
+                            log_entry['value_bool'] = value
+                        elif isinstance(value, (list,dict)):
+                            log_entry['value_json'] = json.dumps(value)
+                        elif isinstance(value, bytes):
+                            log_entry['value_blob'] = value.encode('base64')
+                        else:
+                            log_entry['value_string'] = str(value)
+                    */
+
+                    logEntry.value = logEntry.value_double || logEntry.value_bool || logEntry.value_json || logEntry.value_string || logEntry.value;
 
                     // if value is a string then try to convert it to a json object
                     if (typeof logEntry.value === 'string') {

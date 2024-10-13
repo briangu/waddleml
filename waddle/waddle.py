@@ -19,7 +19,6 @@ class WaddleLogger:
         self.db_root = db_root
         self.project = project
         self.name = name or datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.scoped_run_name = f"{self.project}/{self.name}"
         self.log_path = os.path.join(db_root, "logs")
         os.makedirs(self.log_path, exist_ok=True)
         self.config: argparse.Namespace = config
@@ -55,7 +54,7 @@ class WaddleLogger:
         run_info = {
             "run_info": {
                 'project': self.project,
-                'name': self.scoped_run_name,
+                'name': self.name,
                 'start_time': datetime.now().isoformat(),
                 'cli_params': cli_params_json,
                 'python_version': python_version,
@@ -124,7 +123,8 @@ class WaddleLogger:
         timestamp = timestamp or datetime.now().isoformat()
         for name, value in data.items():
             log_entry = {
-                'run': self.scoped_run_name,
+                'run': self.name,
+                'project': self.project,
                 'step': step or 0,
                 'category': category,
                 'name': name,
