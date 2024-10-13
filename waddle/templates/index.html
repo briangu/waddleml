@@ -47,22 +47,42 @@
             overflow-y: auto;
         }
 
-        #sidebar ul {
+        /* Project selection dropdown */
+        #project-select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        /* Runs list styles */
+        #runs-list ul {
             list-style-type: none;
             padding: 0;
         }
 
-        #sidebar li {
+        #runs-list li {
             margin-bottom: 10px;
         }
 
-        #sidebar a {
+        #runs-list a {
             text-decoration: none;
             color: #333;
+            display: block;
+            padding: 8px;
+            border-radius: 4px;
         }
 
-        #sidebar a:hover {
-            text-decoration: underline;
+        #runs-list a:hover {
+            background-color: #d0d0d0;
+            text-decoration: none;
+        }
+
+        #runs-list a.selected {
+            font-weight: bold;
+            background-color: #b0b0b0;
+            color: #fff;
         }
 
         /* Content area styles */
@@ -208,7 +228,14 @@
     </div>
     <div id="main-container">
         <div id="sidebar">
+            <!-- Project selection dropdown -->
+            <select id="project-select">
+                <option value="" disabled>Loading projects...</option>
+            </select>
             <!-- Runs will be dynamically inserted here -->
+            <div id="runs-list">
+                <ul></ul>
+            </div>
         </div>
         <div id="content">
             <div id="charts-container">
@@ -234,17 +261,16 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            let isInitialLoadComplete = false;
-
             // Object to hold chart instances organized by category
             const categories = {};
 
-            // Keep track of the selected run
-            let project_data = null;
-            let project_runs = null;
-
+            // Keep track of projects and runs
+            let projects = [];
+            let selectedProjectId = null;
+            let runs = [];
             let selectedRunId = null;
             let latestRunId = null;
+            let isInitialLoadComplete = false;
 
             /**
              * Function to create a new chart within a specified category.
@@ -252,8 +278,6 @@
              * @param {string} name - The name of the chart.
              */
             function createChartForName(category, name, value_count) {
-                // console.log(`Creating chart "${name}" under category "${category}"`);
-
                 // Ensure the category section exists
                 let categorySection = categories[category]?.section;
                 if (!categorySection) {
@@ -296,7 +320,7 @@
                 const chartContainer = document.createElement('div');
                 chartContainer.className = 'chart-container';
 
-                // Optional: Add a title for the chart
+                // Add a title for the chart
                 const chartTitle = document.createElement('div');
                 chartTitle.className = 'chart-title';
                 chartTitle.textContent = name;
@@ -403,7 +427,6 @@
                         chart: chart,
                         data: chartData
                     };
-                    // console.log(`Chart "${name}" under category "${category}" created and stored.`);
                 } catch (error) {
                     console.error(`Error creating chart "${name}" under category "${category}":`, error);
                 }
@@ -434,25 +457,52 @@
             }
 
             /**
-             * Function to populate the runs in the sidebar.
+             * Function to populate the projects dropdown.
              */
-            function populateRunsSidebar(runs_data) {
-                const sidebar = document.getElementById('sidebar');
-                if (!sidebar) {
-                    console.error('Sidebar container not found in the DOM.');
+            function populateProjectsDropdown() {
+                const projectSelect = document.getElementById('project-select');
+                if (!projectSelect) {
+                    console.error('Project select element not found in the DOM.');
                     return;
                 }
-                // Clear the sidebar
-                sidebar.innerHTML = '';
 
-                // Create a list or menu
-                const runsList = document.createElement('ul');
-                runsList.style.listStyleType = 'none';
-                runsList.style.padding = '0';
+                // Clear existing options
+                projectSelect.innerHTML = '';
 
-                runs_data.forEach(run => {
+                projects.forEach((project, index) => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = project.name;
+                    projectSelect.appendChild(option);
+                });
+
+                // Select the first project by default
+                if (projects.length > 0) {
+                    selectedProjectId = projects[0].id;
+                    projectSelect.value = selectedProjectId;
+                }
+            }
+
+            /**
+             * Function to populate the runs in the sidebar.
+             */
+            function populateRunsSidebar() {
+                const runsList = document.querySelector('#runs-list ul');
+                if (!runsList) {
+                    console.error('Runs list element not found in the DOM.');
+                    return;
+                }
+
+                // Clear the runs list
+                runsList.innerHTML = '';
+
+                if (runs.length === 0) {
+                    runsList.innerHTML = '<li>No runs available for this project.</li>';
+                    return;
+                }
+
+                runs.forEach((run, index) => {
                     const runItem = document.createElement('li');
-                    runItem.style.marginBottom = '10px';
 
                     const runLink = document.createElement('a');
                     runLink.href = '#';
@@ -461,30 +511,78 @@
 
                     // Highlight the selected run
                     if (run.id === selectedRunId) {
-                        runLink.style.fontWeight = 'bold';
+                        runLink.classList.add('selected');
                     }
 
                     // Add click event
                     runLink.addEventListener('click', function(event) {
                         event.preventDefault();
+                        // Avoid reloading the same run
+                        if (run.id === selectedRunId) return;
+
+                        // Update selected run
+                        selectedRunId = run.id;
+                        // Update the selected link's appearance
+                        const allRunLinks = runsList.querySelectorAll('a');
+                        allRunLinks.forEach(link => link.classList.remove('selected'));
+                        runLink.classList.add('selected');
+
                         // Clear existing charts and categories
                         clearCharts();
                         // Fetch data for the selected run
-                        fetchData(run.id);
+                        fetchRunData(selectedProjectId, selectedRunId);
                     });
 
                     runItem.appendChild(runLink);
                     runsList.appendChild(runItem);
                 });
 
-                sidebar.appendChild(runsList);
+                // Select the latest run by default if not already selected
+                if (!selectedRunId && runs.length > 0) {
+                    selectedRunId = runs[0].id;
+                    const firstRunLink = runsList.querySelector('a');
+                    if (firstRunLink) {
+                        firstRunLink.classList.add('selected');
+                    }
+                    fetchRunData(selectedProjectId, selectedRunId);
+                }
             }
 
+            /**
+             * Function to handle project selection change.
+             * @param {string} projectId - The ID of the selected project.
+             */
+            async function onProjectChange(projectId) {
+                selectedProjectId = projectId;
+                selectedRunId = null;
+                runs = [];
+                clearCharts();
+
+                try {
+                    // Fetch runs for the selected project
+                    const runsResponse = await fetch(`/projects/${projectId}/runs`);
+                    if (!runsResponse.ok) {
+                        throw new Error('Network response was not ok while fetching runs.');
+                    }
+                    runs = await runsResponse.json();
+                    console.log('Runs data fetched:', runs);
+
+                    // Populate the runs sidebar
+                    populateRunsSidebar();
+                } catch (error) {
+                    console.error('Error fetching runs:', error);
+                }
+            }
+
+            /**
+             * Function to apply a log entry to the charts.
+             * @param {Object} logEntry - The log entry data.
+             */
             function applyLogEntry(logEntry) {
                 const category = logEntry.category;
                 const name = logEntry.name;
 
-                data = logEntry.data;
+                let data = logEntry.data;
                 logEntry.value = data?.value_double || data?.value_bool || data?.value_json || data?.value_string || data?.value || logEntry.value;
 
                 // if value is a string then try to convert it to a json object
@@ -503,7 +601,6 @@
 
                 // Create the chart if it doesn't exist
                 if (!categories[category]?.charts[name]) {
-                    // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
                     let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
                     createChartForName(category, name, value_count);
                 }
@@ -520,7 +617,9 @@
                 if (Array.isArray(logEntry.value)) {
                     let i = 0;
                     logEntry.value.forEach(value => {
-                        chartInfo.data.datasets[i].data.push(value);
+                        if (chartInfo.data.datasets[i]) {
+                            chartInfo.data.datasets[i].data.push(value);
+                        }
                         i += 1;
                     });
                 } else {
@@ -530,70 +629,21 @@
             }
 
             /**
-             * Fetch initial data and populate charts.
+             * Fetch run data and populate charts.
+             * @param {string} projectId - The ID of the project.
+             * @param {string} runId - The ID of the run.
              */
-            async function fetchData(runId) {
+            async function fetchRunData(projectId, runId) {
                 try {
-                    if (project_data == null) {
-                        // get the project info
-                        let project_response = await fetch('/projects');
-                        if (!project_response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        project_data = await project_response.json();
-                        if (Array.isArray(project_data)) {
-                            project_data = project_data[0];
-                        }
-                        console.log('Project data fetched:', project_data);
-                        // if project_data is undefined, then set to null and return
-                        if (project_data == undefined) {
-                            project_data = null;
-                            return;
-                        }
-
-                        // update the dashboard title
-                        const dashboardTitle = document.getElementById('dashboard-title');
-                        console.log(project_data.name);
-                        dashboardTitle.textContent = "Project: " + project_data.name;
-                    }
-
-                    if (project_runs == null) {
-                        // get the project runs
-                        project_runs = await fetch('/projects/'+project_data.id+'/runs');
-                        if (!project_runs.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        project_runs = await project_runs.json();
-                        console.log('Runs data fetched:', project_runs);
-                    }
-
-                    if (project_runs.length > 0) {
-                        latestRunId = project_runs[0].id;
-                    } else {
-                        console.error('No runs available.');
-                        // Handle the case when there are no runs, e.g., display a message or retry fetching
-                        return;
-                    }
-                    // If runId is not provided, use the latest run
-                    if (!runId) {
-                        runId = latestRunId;
-                    }
-
-                    // Update global variables
-                    selectedRunId = runId;
-
-                    // Populate the runs in the sidebar
-                    populateRunsSidebar(project_runs, runId);
-
-                    const response = await fetch('/projects/'+project_data.id+'/runs/' + runId);
+                    const response = await fetch(`/projects/${projectId}/runs/${runId}`);
                     if (!response.ok) {
-                        throw new Error('Network response was not ok');
+                        throw new Error('Network response was not ok while fetching run data.');
                     }
                     const data = await response.json();
-                    console.log('Initial data fetched:', data);
+                    console.log('Run data fetched:', data);
 
                     // if there's no data then update the ui to show that there's no data and return
-                    if (data.length == 0) {
+                    if (data.length === 0) {
                         const mainChartsContainer = document.getElementById('charts-container');
                         if (mainChartsContainer) {
                             mainChartsContainer.innerHTML = '<p>No data available for this run.</p>';
@@ -610,7 +660,43 @@
                     // Set initial load complete flag
                     isInitialLoadComplete = true;
                 } catch (error) {
-                    console.error('Error fetching data:', error);
+                    console.error('Error fetching run data:', error);
+                }
+            }
+
+            /**
+             * Fetch initial projects and set up the dashboard.
+             */
+            async function initializeDashboard() {
+                try {
+                    // Fetch projects
+                    const projectsResponse = await fetch('/projects');
+                    if (!projectsResponse.ok) {
+                        throw new Error('Network response was not ok while fetching projects.');
+                    }
+                    projects = await projectsResponse.json();
+                    console.log('Projects fetched:', projects);
+
+                    if (projects.length === 0) {
+                        const dashboardTitle = document.getElementById('dashboard-title');
+                        dashboardTitle.textContent = "No projects available.";
+                        const sidebar = document.getElementById('sidebar');
+                        sidebar.innerHTML = '<p>No projects to display.</p>';
+                        return;
+                    }
+
+                    // Populate the projects dropdown
+                    populateProjectsDropdown();
+
+                    // Update the dashboard title
+                    const dashboardTitle = document.getElementById('dashboard-title');
+                    const selectedProject = projects.find(p => p.id === selectedProjectId);
+                    dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+                    // Fetch runs for the selected project
+                    await onProjectChange(selectedProjectId);
+                } catch (error) {
+                    console.error('Error initializing dashboard:', error);
                 }
             }
 
@@ -622,7 +708,7 @@
                 const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
                 ws.onmessage = function(event) {
-                    // If the user is not viewing the latest run, ignore updates
+                    // Only update if the user is viewing the latest run of the selected project
                     if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
                         return;
                     }
@@ -654,8 +740,21 @@
             }
 
             // Initialize the dashboard
-            fetchData();
+            initializeDashboard();
             setupWebSocket();
+
+            // Add event listener for project selection
+            const projectSelect = document.getElementById('project-select');
+            projectSelect.addEventListener('change', function(event) {
+                const selectedProjectId = event.target.value;
+                // Update the dashboard title
+                const selectedProject = projects.find(p => p.id === selectedProjectId);
+                const dashboardTitle = document.getElementById('dashboard-title');
+                dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+                // Handle project change
+                onProjectChange(selectedProjectId);
+            });
         });
     </script>
 </body>
