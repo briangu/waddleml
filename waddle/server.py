@@ -15,7 +15,6 @@ from fastapi.templating import Jinja2Templates
 import pandas as pd
 from datetime import datetime
 from functools import lru_cache
-import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +34,10 @@ async def lifespan(app: FastAPI):
     await waddle_server_instance.start()
     try:
         yield
+    except Exception as e:
+        logger.error(f"Error in lifespan context manager: {e}")
     finally:
-        if waddle_server_instance:
-            await waddle_server_instance.stop()
+        await waddle_server_instance.stop()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -129,7 +129,7 @@ class WaddleServer:
         self.watch_task = asyncio.create_task(self.watch_for_logs())
 
         # Start peer synchronization
-        self.sync_task = asyncio.create_task(self.sync_with_peers())
+        # self.sync_task = asyncio.create_task(self.sync_with_peers())
 
     async def stop(self):
         # Stop log watching
@@ -216,8 +216,8 @@ class WaddleServer:
     def _resolve_project_and_run(self, project_name, run_name, timestamp=None):
         timestamp = timestamp or datetime.now()
         # Resolve project and run names into IDs and insert into the database if not already present
-        project_id = self._insert_project_info({"name": project_name, "timestamp": timestamp.isoformat()})
-        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": timestamp.isoformat()})
+        project_id = self._insert_project_info({"name": project_name, "timestamp": timestamp})
+        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": timestamp})
         return project_id, run_id
 
     def _ingest_log_entry(self, log_entry):
@@ -226,7 +226,7 @@ class WaddleServer:
             if 'run_info' in log_entry:
                 run_info = log_entry['run_info']
                 project_name = run_info['project']
-                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info.get('start_time') or run_info.get('timestamp') or datetime.now().isoformat()})
+                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info.get('start_time') or run_info.get('timestamp') or datetime.now()})
                 self._insert_run_info(project_id, log_entry['run_info'])
                 return
 
@@ -251,11 +251,11 @@ class WaddleServer:
             logger.error(f"Error ingesting log entry: {e}")
             raise
 
-    async def sync_with_peers(self):
-        async with httpx.AsyncClient() as client:
-            for peer_url in self.peers:
-                task = asyncio.create_task(self.sync_with_peer(peer_url, client))
-                self.peer_tasks.append(task)
+    # async def sync_with_peers(self):
+    #     async with httpx.AsyncClient() as client:
+    #         for peer_url in self.peers:
+    #             task = asyncio.create_task(self.sync_with_peer(peer_url, client))
+    #             self.peer_tasks.append(task)
 
     async def sync_with_peer(self, peer_url, client):
         try:
@@ -389,8 +389,8 @@ async def get_run(project_id: int, run_id: int, history: int = 10):
                 WHERE run_id = ? AND name = ?
                 ORDER BY step DESC LIMIT ?
             """, (run_id, name, history)).fetchdf()
-            clean_df = sanitize_df(df_logs).to_dict(orient='records')
-            data.extend(clean_df)
+            clean_df = sanitize_df(df_logs)
+            data.extend(clean_df.to_dict(orient='records'))
         logger.info(f"Returning {len(data)} records for run {run_id}")
         return data
     except Exception as e:

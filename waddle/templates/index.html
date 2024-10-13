@@ -501,6 +501,10 @@
                     return;
                 }
 
+                if (runs.length > 0) {
+                    latestRunId = runs[0].id;
+                }
+
                 runs.forEach((run, index) => {
                     const runItem = document.createElement('li');
 
