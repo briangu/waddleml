@@ -3,10 +3,9 @@ import asyncio
 import glob
 import json
 import os
-import threading
+import logging
 import time
 from contextlib import asynccontextmanager
-import logging
 
 import duckdb
 import uvicorn
@@ -16,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 import pandas as pd
 from datetime import datetime
 from functools import lru_cache
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +27,17 @@ async def lifespan(app: FastAPI):
     parser = argparse.ArgumentParser()
     parser.add_argument('--db-root', type=str, default='.waddle')
     parser.add_argument('--log-root', type=str, default=os.path.join('.waddle', 'logs'))
+    parser.add_argument('--peer', type=str, action='append', default=[], help='URL of peer WaddleServer to connect to.')
     args, _ = parser.parse_known_args()
 
     loop = asyncio.get_running_loop()
-    waddle_server_instance = WaddleServer(db_root=args.db_root, log_root=args.log_root, loop=loop)
-    yield
-    if waddle_server_instance:
-        waddle_server_instance.stop()
+    waddle_server_instance = WaddleServer(db_root=args.db_root, log_root=args.log_root, loop=loop, peers=args.peer)
+    await waddle_server_instance.start()
+    try:
+        yield
+    finally:
+        if waddle_server_instance:
+            await waddle_server_instance.stop()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -63,15 +67,25 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 class WaddleServer:
-    def __init__(self, db_root, log_root=None, loop=None, watch_delay=10):
+    def __init__(self, db_root, log_root=None, loop=None, peers=None, watch_delay=10):
         self.db_path = os.path.join(db_root, f"waddle.db")
         self.log_root = log_root or os.path.join(db_root, "logs")
-        self.loop = loop
+        self.loop = loop or asyncio.get_event_loop()
         self.watch_delay = watch_delay
+
+        self.peers = peers or []
+        self.peer_tasks = []
+        self.peer_ws_clients = {}
 
         self.con = duckdb.connect(self.db_path)
 
-        # add project info to the database
+        # Initialize database tables
+        self._initialize_database()
+
+        # For log watching
+        self.watching = True
+
+    def _initialize_database(self):
         self.con.execute('''
             CREATE SEQUENCE IF NOT EXISTS seq_project_info START 1;
             CREATE TABLE IF NOT EXISTS project_info (
@@ -83,7 +97,6 @@ class WaddleServer:
             );
         ''')
 
-        # Create tables if they don't exist
         self.con.execute('''
             CREATE SEQUENCE IF NOT EXISTS seq_run_info START 1;
             CREATE TABLE IF NOT EXISTS run_info (
@@ -111,46 +124,50 @@ class WaddleServer:
             );
         ''')
 
-        if self.log_root:
-            # Start the folder-watching thread
-            self.watching = True
-            self.watch_thread = threading.Thread(target=self._watch_for_logs, daemon=True)
-            self.watch_thread.start()
+    async def start(self):
+        # Start log watching
+        self.watch_task = asyncio.create_task(self.watch_for_logs())
 
-    def stop(self):
-        if self.log_root:
-            self.watching = False
-            self.watch_thread.join()
+        # Start peer synchronization
+        self.sync_task = asyncio.create_task(self.sync_with_peers())
 
-    def _watch_for_logs(self):
-        try:
-            while self.watching:
-                logger.info(f"{time.time()} Watching folder for logs...")
+    async def stop(self):
+        # Stop log watching
+        self.watching = False
+        if hasattr(self, 'watch_task'):
+            await self.watch_task
 
-                # Get all directories recursively
-                log_folders = glob.glob(os.path.join(self.log_root, '**'), recursive=True)
-                log_folders = [f for f in log_folders if os.path.isdir(f)]
+        # Disconnect from peers
+        for task in self.peer_tasks:
+            task.cancel()
+        await asyncio.gather(*self.peer_tasks, return_exceptions=True)
 
-                for log_folder in log_folders:
-                    logger.info(f"Processing log folder: {log_folder}")
+    async def watch_for_logs(self):
+        while self.watching:
+            logger.info(f"{time.time()} Watching folder for logs...")
 
-                    # Process log entries recursively
-                    log_files = glob.glob(os.path.join(log_folder, '**', '*.json'), recursive=True)
-                    for log_file in log_files:
-                        try:
-                            logging.info(f"Processing log file: {log_file}")
-                            with open(log_file, 'r') as f:
-                                log_entry = json.load(f)
-                                # Ingest log entry
-                                self._ingest_log_entry(log_entry)
-                            # Delete the log file after processing
-                            os.remove(log_file)
-                        except Exception as e:
-                            logger.error(f"Error processing log file {log_file}: {e}")
+            # Get all directories recursively
+            log_folders = glob.glob(os.path.join(self.log_root, '**'), recursive=True)
+            log_folders = [f for f in log_folders if os.path.isdir(f)]
 
-                time.sleep(self.watch_delay)
-        except Exception as e:
-            logger.error(f"Error in log_root_for_logs: {e}")
+            for log_folder in log_folders:
+                logger.info(f"Processing log folder: {log_folder}")
+
+                # Process log entries recursively
+                log_files = glob.glob(os.path.join(log_folder, '**', '*.json'), recursive=True)
+                for log_file in log_files:
+                    try:
+                        logging.info(f"Processing log file: {log_file}")
+                        with open(log_file, 'r') as f:
+                            log_entry = json.load(f)
+                            # Ingest log entry
+                            self._ingest_log_entry(log_entry)
+                        # Delete the log file after processing
+                        os.remove(log_file)
+                    except Exception as e:
+                        logger.error(f"Error processing log file {log_file}: {e}")
+
+            await asyncio.sleep(self.watch_delay)
 
     def _insert_project_info(self, project_info):
         self.con.execute("SELECT id FROM project_info WHERE name = ?", (project_info['name'],))
@@ -199,8 +216,8 @@ class WaddleServer:
     def _resolve_project_and_run(self, project_name, run_name, timestamp=None):
         timestamp = timestamp or datetime.now()
         # Resolve project and run names into IDs and insert into the database if not already present
-        project_id = self._insert_project_info({"name": project_name, "timestamp": timestamp})
-        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": timestamp})
+        project_id = self._insert_project_info({"name": project_name, "timestamp": timestamp.isoformat()})
+        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": timestamp.isoformat()})
         return project_id, run_id
 
     def _ingest_log_entry(self, log_entry):
@@ -209,7 +226,7 @@ class WaddleServer:
             if 'run_info' in log_entry:
                 run_info = log_entry['run_info']
                 project_name = run_info['project']
-                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info.get('start_time') or run_info.get('timestamp') or datetime.now()})
+                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info.get('start_time') or run_info.get('timestamp') or datetime.now().isoformat()})
                 self._insert_run_info(project_id, log_entry['run_info'])
                 return
 
@@ -234,30 +251,86 @@ class WaddleServer:
             logger.error(f"Error ingesting log entry: {e}")
             raise
 
-@app.post("/ingest")
-async def ingest_log(log_entry: dict):
-    if not waddle_server_instance:
-        raise HTTPException(status_code=500, detail="Server not initialized")
-    try:
-        waddle_server_instance._ingest_log_entry(log_entry)
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def sync_with_peers(self):
+        async with httpx.AsyncClient() as client:
+            for peer_url in self.peers:
+                task = asyncio.create_task(self.sync_with_peer(peer_url, client))
+                self.peer_tasks.append(task)
+
+    async def sync_with_peer(self, peer_url, client):
+        try:
+            logger.info(f"Starting synchronization with peer: {peer_url}")
+
+            # Initial synchronization
+            await self.initial_sync(peer_url, client)
+
+            # Connect to peer's WebSocket for live updates
+            await self.connect_peer_websocket(peer_url, client)
+
+        except asyncio.CancelledError:
+            logger.info(f"Sync task with peer {peer_url} has been cancelled.")
+        except Exception as e:
+            logger.error(f"Error syncing with peer {peer_url}: {e}")
+            # Optionally implement retry logic here
+
+    async def initial_sync(self, peer_url, client):
+        try:
+            # Fetch projects from peer
+            projects_resp = await client.get(f"{peer_url}/projects")
+            projects_resp.raise_for_status()
+            peer_projects = projects_resp.json()
+
+            # Fetch local projects
+            local_projects = self.con.execute("SELECT name FROM project_info").fetchall()
+            local_project_names = set(p[0] for p in local_projects)
+
+            # Determine which projects to sync
+            for project in peer_projects:
+                project_name = project['name']
+                if project_name not in local_project_names:
+                    logger.info(f"Synchronizing project: {project_name}")
+                    project_id = project['id']
+
+                    # Fetch runs for the project
+                    runs_resp = await client.get(f"{peer_url}/projects/{project_id}/runs")
+                    runs_resp.raise_for_status()
+                    peer_runs = runs_resp.json()
+
+                    for run in peer_runs:
+                        run_id = run['id']
+                        logger.info(f"Synchronizing run: {run_id} for project: {project_name}")
+
+                        # Fetch run details
+                        run_detail_resp = await client.get(f"{peer_url}/projects/{project_id}/runs/{run_id}")
+                        run_detail_resp.raise_for_status()
+                        run_logs = run_detail_resp.json()
+
+                        for log_entry in run_logs:
+                            self._ingest_log_entry(log_entry['data'])
+
+            logger.info(f"Initial synchronization with peer {peer_url} completed.")
+
+        except Exception as e:
+            logger.error(f"Failed initial synchronization with peer {peer_url}: {e}")
+
+    async def connect_peer_websocket(self, peer_url, client):
+        try:
+            ws_url = peer_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+            logger.info(f"Connecting to peer WebSocket at {ws_url}")
+
+            async with client.websocket(ws_url) as websocket:
+                logger.info(f"Connected to peer WebSocket at {ws_url}")
+                async for message in websocket.iter_text():
+                    log_entry = json.loads(message)
+                    logger.debug(f"Received log entry from peer {peer_url}: {log_entry}")
+                    self._ingest_log_entry(log_entry['data'])
+
+        except Exception as e:
+            logger.error(f"WebSocket connection to peer {peer_url} failed: {e}")
+            # Optionally implement reconnection logic here
 
 
 def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
-    # coalesce the value_double and value_string columns into a value column
-    # df['value'] = df['value_double'].combine_first(df['value_string'])
-
-    # for i, row in df.iterrows():
-    #     if not pd.isna(row['value_double']):
-    #         df.at[i, 'value'] = row['value_double']
-    #     else:
-    #         df.at[i, 'value'] = row['value_string']
-
-    # drop the value_double and value_string columns
-    # df = df.drop(columns=['value_double', 'value_string'])
-
     # Convert timestamps to ISO format
     if 'timestamp' in df.columns:
         df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
@@ -282,7 +355,17 @@ async def get_runs(project_id: int):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        df = waddle_server_instance.con.execute("SELECT id,project_id,start_time,data,(SELECT COUNT(id) FROM logs WHERE run_id=id) as rows FROM run_info WHERE project_id = ? AND rows > 0 ORDER BY start_time DESC", (project_id,)).fetchdf()
+        df = waddle_server_instance.con.execute("""
+            SELECT
+                id,
+                project_id,
+                start_time,
+                data,
+                (SELECT COUNT(id) FROM logs WHERE run_id=id) as rows
+            FROM run_info
+            WHERE project_id = ? AND rows > 0
+            ORDER BY start_time DESC
+        """, (project_id,)).fetchdf()
         df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
         return df.to_dict(orient='records')
     except Exception as e:
@@ -301,8 +384,12 @@ async def get_run(project_id: int, run_id: int, history: int = 10):
         # for each name then get the history of that name and collect it in a list
         data = []
         for name in df['name']:
-            df = waddle_server_instance.con.execute("SELECT * FROM logs WHERE run_id = ? AND name = ? ORDER BY step DESC LIMIT ?", (run_id,name,history,)).fetchdf()
-            clean_df = sanitize_df(df).to_dict(orient='records')
+            df_logs = waddle_server_instance.con.execute("""
+                SELECT * FROM logs
+                WHERE run_id = ? AND name = ?
+                ORDER BY step DESC LIMIT ?
+            """, (run_id, name, history)).fetchdf()
+            clean_df = sanitize_df(df_logs).to_dict(orient='records')
             data.extend(clean_df)
         logger.info(f"Returning {len(data)} records for run {run_id}")
         return data
@@ -311,22 +398,6 @@ async def get_run(project_id: int, run_id: int, history: int = 10):
         print(e)
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
-# @app.get("/data")
-# async def get_data(history: int = 2000):
-#     history = min(max(history, 1), 2000)  # Limit history to between 1 and 1000
-#     if not waddle_server_instance:
-#         raise HTTPException(status_code=500, detail="Server not initialized")
-#     try:
-#         df = waddle_server_instance.con.execute("SELECT * FROM logs").fetchdf()
-#         df = sanitize_df(df)
-#         df = df[-history:]
-#         x = df.to_dict(orient='records')
-#         return x
-#     except Exception as e:
-#         import traceback
-#         logger.error(traceback.format_exc())
-#         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -349,7 +420,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-def main(port=8000, bind="127.0.0.1", log_level="critical"):
+def main(port=8000, bind="127.0.0.1", log_level="critical", peers=[]):
     logging.getLogger("uvicorn.error").handlers = []
     logging.getLogger("uvicorn.error").propagate = False
 
@@ -368,10 +439,12 @@ def main(port=8000, bind="127.0.0.1", log_level="critical"):
     print("Waddle server stopped.")
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--server-port", type=int, default=8000)
     parser.add_argument("--server-bind", type=str, default="127.0.0.1")
     parser.add_argument("--log-level", type=str, default="critical")
+    parser.add_argument("--peer", type=str, action='append', default=[], help='URL of peer WaddleServer to connect to.')
+    parser.add_argument('--db-root', type=str, default='.waddle')
+    parser.add_argument('--log-root', type=str, default=os.path.join('.waddle', 'logs'))
     args = parser.parse_args()
-    main(port=args.server_port, bind=args.server_bind, log_level=args.log_level)
+    main(port=args.server_port, bind=args.server_bind, log_level=args.log_level, peers=args.peer)
