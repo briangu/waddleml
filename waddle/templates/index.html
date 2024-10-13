@@ -480,6 +480,55 @@
                 sidebar.appendChild(runsList);
             }
 
+            function applyLogEntry(logEntry) {
+                const category = logEntry.category;
+                const name = logEntry.name;
+
+                data = logEntry.data;
+                logEntry.value = data?.value_double || data?.value_bool || data?.value_json || data?.value_string || data?.value || logEntry.value;
+
+                // if value is a string then try to convert it to a json object
+                if (typeof logEntry.value === 'string') {
+                    try {
+                        logEntry.value = JSON.parse(logEntry.value);
+                    } catch (error) {
+                        console.error('Error parsing log entry value:', error);
+                    }
+                }
+
+                if (!category || !name) {
+                    console.warn('Log entry missing category or name:', logEntry);
+                    return;
+                }
+
+                // Create the chart if it doesn't exist
+                if (!categories[category]?.charts[name]) {
+                    // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
+                    let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
+                    createChartForName(category, name, value_count);
+                }
+
+                // Update chart data
+                const chartInfo = categories[category]?.charts[name];
+                if (!chartInfo) {
+                    console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
+                    return;
+                }
+
+                chartInfo.data.labels.push(logEntry.step);
+                // if value is an array then add each value to the chart
+                if (Array.isArray(logEntry.value)) {
+                    let i = 0;
+                    logEntry.value.forEach(value => {
+                        chartInfo.data.datasets[i].data.push(value);
+                        i += 1;
+                    });
+                } else {
+                    chartInfo.data.datasets[0].data.push(logEntry.value);
+                }
+                chartInfo.chart.update();
+            }
+
             /**
              * Fetch initial data and populate charts.
              */
@@ -553,50 +602,9 @@
                     }
 
                     // Process each log entry
-                    data.forEach(entry => {
-                        const category = entry.category;
-                        const name = entry.name;
-
-                        // if value is a string then try to convert it to a json object
-                        if (typeof entry.value === 'string') {
-                            try {
-                                entry.value = JSON.parse(entry.value);
-                            } catch (error) {
-                                console.error('Error parsing log entry value:', error);
-                            }
-                        }
-
-                        if (!category || !name) {
-                            console.warn('Log entry missing category or name:', entry);
-                            return;
-                        }
-
-                        // Create the chart if it doesn't exist
-                        if (!categories[category]?.charts[name]) {
-                            // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                            let value_count = Array.isArray(entry.value) ? entry.value.length : 1;
-                            createChartForName(category, name, value_count);
-                        }
-
-                        // Update chart data
-                        const chartInfo = categories[category]?.charts[name];
-                        if (!chartInfo) {
-                            console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
-                            return;
-                        }
-
-                        chartInfo.data.labels.push(entry.step);
-                        // if value is an array then add each value to the chart
-                        if (Array.isArray(entry.value)) {
-                            let i = 0;
-                            entry.value.forEach(value => {
-                                chartInfo.data.datasets[i].data.push(value);
-                                i += 1;
-                            });
-                        } else {
-                            chartInfo.data.datasets[0].data.push(entry.value);
-                        }
-                        chartInfo.chart.update();
+                    data.forEach(logEntry => {
+                        logEntry.data = JSON.parse(logEntry.data);
+                        applyLogEntry(logEntry);
                     });
 
                     // Set initial load complete flag
@@ -618,70 +626,7 @@
                     if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
                         return;
                     }
-
-                    const logEntry = JSON.parse(event.data);
-                    // console.log('WebSocket message received:', logEntry);
-
-                    const category = logEntry.category;
-                    const name = logEntry.name;
-
-                    /*
-                        Data may come in one of a variety of fields:
-
-                        if isinstance(value, (int, float)):
-                            log_entry['value_double'] = value
-                        elif isinstance(value, bool):
-                            log_entry['value_bool'] = value
-                        elif isinstance(value, (list,dict)):
-                            log_entry['value_json'] = json.dumps(value)
-                        elif isinstance(value, bytes):
-                            log_entry['value_blob'] = value.encode('base64')
-                        else:
-                            log_entry['value_string'] = str(value)
-                    */
-
-                    logEntry.value = logEntry.value_double || logEntry.value_bool || logEntry.value_json || logEntry.value_string || logEntry.value;
-
-                    // if value is a string then try to convert it to a json object
-                    if (typeof logEntry.value === 'string') {
-                        try {
-                            logEntry.value = JSON.parse(logEntry.value);
-                        } catch (error) {
-                            console.error('Error parsing log entry value:', error);
-                        }
-                    }
-
-                    if (!category || !name) {
-                        console.warn('WebSocket log entry missing category or name:', logEntry);
-                        return;
-                    }
-
-                    // Create the chart if it doesn't exist
-                    if (!categories[category]?.charts[name]) {
-                        // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                        // is the entry a vector?
-                        let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
-                        createChartForName(category, name, value_count);
-                    }
-
-                    // Update chart data
-                    const chartInfo = categories[category]?.charts[name];
-                    if (!chartInfo) {
-                        console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
-                        return;
-                    }
-
-                    chartInfo.data.labels.push(logEntry.step);
-                    if (Array.isArray(logEntry.value)) {
-                        let i = 0;
-                        logEntry.value.forEach(value => {
-                            chartInfo.data.datasets[i].data.push(value);
-                            i += 1;
-                        });
-                    } else {
-                        chartInfo.data.datasets[0].data.push(logEntry.value);
-                    }
-                    chartInfo.chart.update();
+                    applyLogEntry(JSON.parse(event.data));
                 };
 
                 ws.onclose = function(event) {
