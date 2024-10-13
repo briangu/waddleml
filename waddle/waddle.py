@@ -15,12 +15,13 @@ from typing import Any, Dict, Optional
 import uuid
 
 class WaddleLogger:
-    def __init__(self, db_root, project, id=None, config=None, use_gpu_metrics=True, server_url=None):
+    def __init__(self, db_root, project, name=None, config=None, use_gpu_metrics=True, server_url=None):
         self.db_root = db_root
         self.project = project
-        self.id = id or datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.log_folder = os.path.join(db_root, self.project, self.id)
-        os.makedirs(self.log_folder, exist_ok=True)
+        self.name = name or datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.scoped_run_name = f"{self.project}/{self.name}"
+        self.log_path = os.path.join(db_root, "logs")
+        os.makedirs(self.log_path, exist_ok=True)
         self.config: argparse.Namespace = config
         self.use_gpu_metrics = use_gpu_metrics
         self.server_url = server_url
@@ -53,7 +54,8 @@ class WaddleLogger:
         # Prepare the run info dictionary
         run_info = {
             "run_info": {
-                'id': self.id,
+                'project': self.project,
+                'name': self.scoped_run_name,
                 'start_time': datetime.now().isoformat(),
                 'cli_params': cli_params_json,
                 'python_version': python_version,
@@ -68,7 +70,7 @@ class WaddleLogger:
         }
 
         # Write run_info to a file in the log folder
-        run_info_file = os.path.join(self.log_folder, f'{self._get_file_prefix()}.run_info.json')
+        run_info_file = os.path.join(self.log_path, f'{self._get_file_prefix()}.run_info.json')
         with open(run_info_file, 'w') as f:
             json.dump(run_info, f)
 
@@ -122,23 +124,31 @@ class WaddleLogger:
         timestamp = timestamp or datetime.now().isoformat()
         for name, value in data.items():
             log_entry = {
-                'id': self.id,
-                'project': self.project,
+                'run': self.scoped_run_name,
                 'step': step or 0,
                 'category': category,
                 'name': name,
-                'value': value,
                 'timestamp': timestamp
             }
+            if isinstance(value, (int, float)):
+                log_entry['value_double'] = value
+            elif isinstance(value, bool):
+                log_entry['value_bool'] = value
+            elif isinstance(value, (list,dict)):
+                log_entry['value_json'] = json.dumps(value)
+            elif isinstance(value, bytes):
+                log_entry['value_blob'] = value.encode('base64')
+            else:
+                log_entry['value_string'] = str(value)
             # Write to local folder
             filename = f"{self._get_file_prefix()}.json"
             temp_filename = f"{filename}.tmp"
-            filepath = os.path.join(self.log_folder, temp_filename)
+            filepath = os.path.join(self.log_path, temp_filename)
             # Write to a temporary file
             with open(filepath, 'w') as f:
                 json.dump(log_entry, f)
             # Rename to the final filename to ensure atomicity
-            final_filepath = os.path.join(self.log_folder, filename)
+            final_filepath = os.path.join(self.log_path, filename)
             os.rename(filepath, final_filepath)
 
     def log_gpu_metrics_periodically(self, interval=60):

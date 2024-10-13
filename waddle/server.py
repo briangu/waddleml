@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
 from datetime import datetime
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -74,38 +75,44 @@ class WaddleServer:
 
         # add project info to the database
         self.con.execute('''
+            CREATE SEQUENCE IF NOT EXISTS seq_project_info START 1;
             CREATE TABLE IF NOT EXISTS project_info (
+                id INTEGER PRIMARY KEY DEFAULT nextval('seq_project_info'),
                 name VARCHAR,
-                description VARCHAR,
                 timestamp TIMESTAMP,
-                PRIMARY KEY (name)
+                data JSON,
+                UNIQUE (name)
             );
         ''')
-        # non-destructively add project info
-        self.con.execute('''
-            INSERT OR IGNORE INTO project_info VALUES (?, ?, ?)
-        ''', (project, None, datetime.now().isoformat()))
+
+        # insert the default project info
+        self.con.execute('INSERT OR IGNORE INTO project_info (name, timestamp, data) VALUES (?, ?, ?)', (project, datetime.now(), {}))
 
         # Create tables if they don't exist
         self.con.execute('''
+            CREATE SEQUENCE IF NOT EXISTS seq_run_info START 1;
             CREATE TABLE IF NOT EXISTS run_info (
-                id VARCHAR,
+                id INTEGER PRIMARY KEY DEFAULT nextval('seq_run_info'),
+                project_id INTEGER,
+                name VARCHAR,
                 start_time TIMESTAMP,
                 data JSON,
-                PRIMARY KEY (id)
+                UNIQUE (project_id, name),
+                FOREIGN KEY (project_id) REFERENCES project_info(id)
             );
         ''')
 
         self.con.execute('''
+            CREATE SEQUENCE IF NOT EXISTS seq_logs START 1;
             CREATE TABLE IF NOT EXISTS logs (
-                id VARCHAR,
+                id INTEGER PRIMARY KEY DEFAULT nextval('seq_logs'),
+                run_id INTEGER,
                 step INTEGER,
                 category VARCHAR,
                 name VARCHAR,
-                value_double DOUBLE,
-                value_string VARCHAR,
-                value_blob BLOB,
-                timestamp TIMESTAMP
+                timestamp TIMESTAMP,
+                data JSON,
+                FOREIGN KEY (run_id) REFERENCES run_info(id)
             );
         ''')
 
@@ -150,57 +157,94 @@ class WaddleServer:
         except Exception as e:
             logger.error(f"Error in log_root_for_logs: {e}")
 
-    def _ingest_run_info(self, run_info):
-        run_id = run_info['id']
-        self.con.execute("SELECT id FROM run_info WHERE id = ?", (run_id,))
-        if not self.con.fetchall():
+    def _insert_project_info(self, project_info):
+        self.con.execute("SELECT id FROM project_info WHERE name = ?", (project_info['name'],))
+        project_id = self.con.fetchall()
+        if not project_id:
+            self.con.execute('INSERT INTO project_info (name, timestamp, data) VALUES (?, ?, ?)', (
+                project_info['name'],
+                project_info['timestamp'],
+                project_info
+            ))
+            project_id = self.con.execute("SELECT currval('seq_project_info')").fetchone()[0]
+        else:
+            project_id = project_id[0][0]
+        return project_id
+
+    def _insert_run_info(self, project_id, run_info):
+        run_name = run_info['name']
+        self.con.execute("SELECT id FROM run_info WHERE project_id =? AND name = ?", (project_id, run_name,))
+        run_id = self.con.fetchall()
+        if not run_id:
             # Insert into run_info table
-            self.con.execute('INSERT INTO run_info VALUES (?, ?, ?)', (
-                run_info['id'],
+            self.con.execute('INSERT INTO run_info (project_id, name, start_time, data) VALUES (?, ?, ?, ?)', (
+                project_id,
+                run_info['name'],
                 run_info['start_time'],
                 run_info,
             ))
+            run_id = self.con.execute("SELECT currval('seq_run_info')").fetchone()[0]
+        else:
+            run_id = run_id[0][0]
         return run_id
+
+    def _insert_log_entry(self, run_id, log_entry):
+        self.con.execute('INSERT INTO logs (run_id, step, category, name, timestamp, data) VALUES (?, ?, ?, ?, ?, ?)', (
+            run_id,
+            log_entry['step'],
+            log_entry['category'],
+            log_entry['name'],
+            log_entry['timestamp'],
+            log_entry
+        ))
+        log_id = self.con.execute("SELECT currval('seq_logs')").fetchone()[0]
+        return log_id
+
+    def _parse_scoped_run_name(self, run_name):
+        run_name = run_name.split('/')
+        if len(run_name) == 1:
+            project_name = "default"
+            run_name = run_name[0]
+        elif len(run_name) == 2:
+            project_name, run_name = run_name
+        else:
+            raise ValueError(f"Invalid run name: {run_name}")
+        return project_name, run_name
+
+    @lru_cache
+    def _resolve_project_and_run(self, project_name, run_name):
+        # Resolve project and run names into IDs and insert into the database if not already present
+        project_id = self._insert_project_info({"name": project_name, "timestamp": datetime.now()})
+        run_id = self._insert_run_info(project_id, {"name": run_name, "start_time": datetime.now()})
+        return project_id, run_id
 
     def _ingest_log_entry(self, log_entry):
         try:
             # Handle run_info separately
             if 'run_info' in log_entry:
-                self._ingest_run_info(log_entry['run_info'])
+                run_info = log_entry['run_info']
+                project_name = run_info['project']
+                project_id = self._insert_project_info({"name": project_name, "timestamp": run_info['start_time']})
+                self._insert_run_info(project_id, log_entry['run_info'])
                 return
 
-            # Determine the type of the value and insert accordingly
-            value = log_entry['value']
-            value_double = None
-            value_string = None
-            value_blob = None
-
-            if isinstance(value, (int, float)):
-                value_double = value
-            elif isinstance(value, str):
-                value_string = value
-            elif isinstance(value, (list, dict)):
-                # Convert lists and dicts to JSON string
-                value_string = json.dumps(value)
-            elif isinstance(value, bytes):
-                value_blob = value
-            else:
-                # For other types, store as string
-                value_string = json.dumps(value)
-
-            self.con.execute('''
-                INSERT INTO logs (
-                    id, step, category, name, value_double, value_string, value_blob, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                log_entry['id'], log_entry['step'], log_entry['category'], log_entry['name'],
-                value_double, value_string, value_blob, log_entry['timestamp']
-            ))
+            # Resolve project and run names into IDs and insert into the database if not already present
+            scoped_run_name = log_entry.get('run') or log_entry.get('id')
+            project_name, run_name = self._parse_scoped_run_name(scoped_run_name)
+            project_id, run_id = self._resolve_project_and_run(project_name, run_name)
+            log_id = self._insert_log_entry(run_id, log_entry)
+            if 'run_name' in log_entry:
+                del log_entry['run_name']
+            log_entry['project_id'] = project_id
+            log_entry['run_id'] = run_id
+            log_entry['id'] = log_id
 
             # Broadcast the new log entry to connected WebSocket clients
             asyncio.run_coroutine_threadsafe(manager.broadcast(log_entry), self.loop)
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"Error ingesting log entry: {e}")
             raise
 
