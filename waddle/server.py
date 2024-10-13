@@ -26,11 +26,11 @@ async def lifespan(app: FastAPI):
     parser = argparse.ArgumentParser()
     parser.add_argument('--db-root', type=str, default='.waddle')
     parser.add_argument('--project', type=str, default='experiment')
-    parser.add_argument('--watch-folder', type=str, default=None)
+    parser.add_argument('--log-root', type=str, default=os.path.join('.waddle', 'logs'))
     args, _ = parser.parse_known_args()
 
     loop = asyncio.get_running_loop()
-    waddle_server_instance = WaddleServer(db_root=args.db_root, project=args.project, watch_folder=args.watch_folder, loop=loop)
+    waddle_server_instance = WaddleServer(db_root=args.db_root, project=args.project, log_root=args.log_root, loop=loop)
     yield
     if waddle_server_instance:
         waddle_server_instance.stop()
@@ -63,11 +63,10 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 class WaddleServer:
-    def __init__(self, db_root, project, watch_folder=None, loop=None, watch_delay=10):
-        self.db_root = db_root
+    def __init__(self, db_root, project, log_root=None, loop=None, watch_delay=10):
         self.project = project
-        self.db_path = os.path.join(db_root, f"{project}.db")
-        self.watch_folder = watch_folder
+        self.db_path = os.path.join(db_root, f"waddle.db")
+        self.log_root = log_root or os.path.join(db_root, "logs")
         self.loop = loop
         self.watch_delay = watch_delay
 
@@ -92,15 +91,7 @@ class WaddleServer:
             CREATE TABLE IF NOT EXISTS run_info (
                 id VARCHAR,
                 start_time TIMESTAMP,
-                cli_params JSON,
-                python_version VARCHAR,
-                os_info VARCHAR,
-                cpu_info VARCHAR,
-                total_memory DOUBLE,
-                gpu_info JSON,
-                code BLOB,
-                git_hash VARCHAR,
-                timestamp TIMESTAMP,
+                data JSON,
                 PRIMARY KEY (id)
             );
         ''')
@@ -118,24 +109,24 @@ class WaddleServer:
             );
         ''')
 
-        if self.watch_folder:
+        if self.log_root:
             # Start the folder-watching thread
             self.watching = True
-            self.watch_thread = threading.Thread(target=self.watch_folder_for_logs, daemon=True)
+            self.watch_thread = threading.Thread(target=self._watch_for_logs, daemon=True)
             self.watch_thread.start()
 
     def stop(self):
-        if self.watch_folder:
+        if self.log_root:
             self.watching = False
             self.watch_thread.join()
 
-    def watch_folder_for_logs(self):
+    def _watch_for_logs(self):
         try:
             while self.watching:
                 logger.info(f"{time.time()} Watching folder for logs...")
 
                 # Get all directories recursively
-                log_folders = glob.glob(os.path.join(self.watch_folder, '**'), recursive=True)
+                log_folders = glob.glob(os.path.join(self.log_root, '**'), recursive=True)
                 log_folders = [f for f in log_folders if os.path.isdir(f)]
 
                 for log_folder in log_folders:
@@ -149,7 +140,7 @@ class WaddleServer:
                             with open(log_file, 'r') as f:
                                 log_entry = json.load(f)
                                 # Ingest log entry
-                                self.ingest_log_entry(log_entry)
+                                self._ingest_log_entry(log_entry)
                             # Delete the log file after processing
                             os.remove(log_file)
                         except Exception as e:
@@ -157,34 +148,25 @@ class WaddleServer:
 
                 time.sleep(self.watch_delay)
         except Exception as e:
-            logger.error(f"Error in watch_folder_for_logs: {e}")
+            logger.error(f"Error in log_root_for_logs: {e}")
 
-    def ingest_run_info(self, run_info):
+    def _ingest_run_info(self, run_info):
         run_id = run_info['id']
-        self.con.execute("SELECT 1 FROM run_info WHERE id = ?", (run_id,))
+        self.con.execute("SELECT id FROM run_info WHERE id = ?", (run_id,))
         if not self.con.fetchall():
             # Insert into run_info table
-            self.con.execute('''
-                INSERT INTO run_info VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+            self.con.execute('INSERT INTO run_info VALUES (?, ?, ?)', (
                 run_info['id'],
                 run_info['start_time'],
-                run_info['cli_params'],
-                run_info['python_version'],
-                run_info['os_info'],
-                run_info['cpu_info'],
-                run_info['total_memory'],
-                run_info['gpu_info'],
-                run_info['code'].encode('utf-8'),
-                run_info['git_hash'],
-                run_info['timestamp']
+                run_info,
             ))
+        return run_id
 
-    def ingest_log_entry(self, log_entry):
+    def _ingest_log_entry(self, log_entry):
         try:
             # Handle run_info separately
             if 'run_info' in log_entry:
-                self.ingest_run_info(log_entry['run_info'])
+                self._ingest_run_info(log_entry['run_info'])
                 return
 
             # Determine the type of the value and insert accordingly
@@ -227,7 +209,7 @@ async def ingest_log(log_entry: dict):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        waddle_server_instance.ingest_log_entry(log_entry)
+        waddle_server_instance._ingest_log_entry(log_entry)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -255,7 +237,7 @@ def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@app.get("/info")
+@app.get("/projects")
 async def get_info():
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
@@ -270,7 +252,7 @@ async def get_runs():
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        df = waddle_server_instance.con.execute("SELECT id,start_time FROM run_info ORDER BY start_time DESC").fetchdf()
+        df = waddle_server_instance.con.execute("SELECT id,start_time,data FROM run_info ORDER BY start_time DESC").fetchdf()
         df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
         return df.to_dict(orient='records')
     except Exception as e:
