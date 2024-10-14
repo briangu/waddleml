@@ -88,6 +88,7 @@ class WaddleServer:
         self._initialize_database()
 
     def _initialize_database(self):
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.con = duckdb.connect(self.db_path)
 
         self.con.execute('''
@@ -269,6 +270,9 @@ class WaddleServer:
             logger.info(f"Connecting to peer WebSocket at {ws_url}")
 
             async with websockets.connect(ws_url) as websocket:
+                websocket: websockets.legacy.client.WebSocketClientProtocol = websocket
+                websocket.send_json = lambda x: websocket.send(json.dumps(x))
+
                 logger.info(f"Connected to peer WebSocket at {ws_url}")
 
                 self.peer_ws_clients[peer_url] = websocket
@@ -295,12 +299,12 @@ class WaddleServer:
                 return {"command": "PROJECTS", "data": projects}
 
             elif message['command'] == "GET_RUNS":
-                runs = await get_project_runs(message['project_id'])
-                return {"command": "RUNS", "project_id": message['project_id'], "data": runs}
+                runs = await get_project_runs(message['project_id'], convert_timestamps=True)
+                return {"command": "RUNS", "project_id": message['project_id'], "data": [json.loads(x["data"]) for x in runs]}
 
             elif message['command'] == "GET_RUN":
-                run = await get_run(message['project_id'], message['run_id'], from_step=message.get('from_step', 0))
-                return {"command": "RUN", "project_id": message['project_id'], "run_id": message['run_id'], "data": run}
+                run = await get_run(message['project_id'], message['run_id'], from_step=message.get('from_step', 0), convert_timestamps=True)
+                return {"command": "RUN", "project_id": message['project_id'], "run_id": message['run_id'], "data": [json.loads(x["data"]) for x in run]}
 
             elif message['command'] == "LOG":
                 self._ingest_log_entry(message['data'])
@@ -366,29 +370,19 @@ class WaddleServer:
             if websocket:
                 await websocket.send_json({"command": "ERROR", "message": str(e)})
 
-
-def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
-    # Convert timestamps to ISO format
-    if 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
-
-    df = df.sort_values(by='step')
-
-    return df
-
-
 @app.get("/projects")
 async def get_project_info():
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
         df = waddle_server_instance.con.execute("SELECT * FROM project_info").fetchdf()
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
         return df.to_dict(orient='records')
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/projects/{project_id}/runs")
-async def get_project_runs(project_id: int):
+async def get_project_runs(project_id: int, convert_timestamps: Optional[bool] = True):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
@@ -403,7 +397,8 @@ async def get_project_runs(project_id: int):
             WHERE project_id = ? AND steps > 0
             ORDER BY start_time DESC
         """, (project_id,)).fetchdf()
-        df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
+        if convert_timestamps:
+            df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
         return df.to_dict(orient='records')
     except Exception as e:
         import traceback
@@ -412,7 +407,7 @@ async def get_project_runs(project_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/projects/{project_id}/runs/{run_id}")
-async def get_run(project_id: int, run_id: int, history: Optional[int] = 10, from_step: Optional[int] = None):
+async def get_run(project_id: int, run_id: int, history: Optional[int] = 10, from_step: Optional[int] = None, convert_timestamps: Optional[bool] = True):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
@@ -433,8 +428,12 @@ async def get_run(project_id: int, run_id: int, history: Optional[int] = 10, fro
                     WHERE run_id = ? AND name = ?
                     ORDER BY step DESC LIMIT ?
                 """, (run_id, name, history)).fetchdf()
-            clean_df = sanitize_df(df_logs)
-            data.extend(clean_df.to_dict(orient='records'))
+
+            # Convert timestamps to ISO format
+            if convert_timestamps and 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
+            df = df.sort_values(by='step')
+            data.extend(df.to_dict(orient='records'))
         logger.info(f"Returning {len(data)} records for run {run_id}")
         return data
     except Exception as e:
