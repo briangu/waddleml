@@ -62,6 +62,7 @@
             margin-bottom: 20px;
             border-radius: 4px;
             border: 1px solid #ccc;
+            font-size: 14px; /* Default font size */
         }
 
         /* Runs list styles */
@@ -210,6 +211,11 @@
                 min-width: unset;
                 height: 300px;
             }
+
+            /* Increase the font size of the project chooser on mobile */
+            #project-select-header {
+                font-size: 16px;
+            }
         }
 
         @media (max-width: 480px) {
@@ -229,6 +235,11 @@
             .chart-title {
                 font-size: 1em;
                 margin-bottom: 8px;
+            }
+
+            /* Further increase the font size on smaller screens */
+            #project-select-header {
+                font-size: 18px;
             }
         }
     </style>
