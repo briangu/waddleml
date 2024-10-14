@@ -578,16 +578,12 @@
                 }
             }
 
-            /**
-             * Function to apply a log entry to the charts.
-             * @param {Object} logEntry - The log entry data.
-             */
             function applyLogEntry(logEntry) {
                 const category = logEntry.category;
                 const name = logEntry.name;
 
                 let data = logEntry?.data || logEntry;
-                logEntry.value = data?.value_double || data?.value_bool || data?.value_json || data?.value_string || data?.value || logEntry.value;
+                logEntry.value = data?.value_double ?? data?.value_bool ?? data?.value_json ?? data?.value_string ?? data?.value ?? logEntry.value;
 
                 // if value is a string then try to convert it to a json object
                 if (typeof logEntry.value === 'string') {
