@@ -594,7 +594,7 @@
              * @param {string} projectId - The ID of the selected project.
              */
             async function onProjectChange(projectId) {
-                selectedProjectId = projectId;
+                selectedProjectId = parseInt(projectId);
                 selectedRunId = null;
                 runs = [];
                 clearCharts();
@@ -751,6 +751,9 @@
                         // Only update if the user is viewing the latest run of the selected project
                         // TODO: we should subscribe to the selected project and run only
                         if (selectedRunId !== msg.data.run_id || selectedProjectId !== msg.data.project_id || !isInitialLoadComplete) {
+                            console.log("Skipping log entry update.", selectedProjectId, selectedRunId, msg.data.project_id, msg.data.run_id, isInitialLoadComplete);
+                            console.log("run_id", selectedRunId === typeof msg.data.run_id, typeof selectedRunId, typeof msg.data.run_id);
+                            console.log("project_id", selectedProjectId === typeof msg.data.project_id, typeof selectedProjectId, typeof msg.data.project_id);
                             return;
                         }
                         applyLogEntry(msg.data);
