@@ -232,25 +232,3 @@ def log(category, data, step, timestamp=None):
         raise ValueError("The data must be a dictionary.")
     run.log(data=data, step=step, category=category, timestamp=timestamp)
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--project-name', type=str, default='experiment')
-    parser.add_argument('--mode', type=str, choices=['solo', 'distributed'], default='solo')
-    parser.add_argument('--server-url', type=str, default=None)
-    args = parser.parse_args()
-
-    # Initialize WaddleLogger
-    init(project=args.project_name, config=args, mode=args.mode, server_url=args.server_url)
-
-    # Simulate the rest of your ML code here
-    # The GPU logging will run in the background
-    try:
-        for step in range(10):
-            log_data = {'loss': 0.01 * step}
-            log(category='model', data=log_data, step=step)
-            time.sleep(5)  # Simulating training steps
-    finally:
-        # Finish up and terminate the server process
-        finish()
-
-    print("Done!")

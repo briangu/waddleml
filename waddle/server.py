@@ -482,14 +482,3 @@ def main(port=8000, bind="127.0.0.1", log_level="critical", peers=[]):
     uvicorn.run("waddle.server:app", host=bind, port=port, log_level=log_level, lifespan="on")
     logger.info("Waddle server stopped.")
     print("Waddle server stopped.")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--server-port", type=int, default=8000)
-    parser.add_argument("--server-bind", type=str, default="127.0.0.1")
-    parser.add_argument("--log-level", type=str, default="critical")
-    parser.add_argument("--peer", type=str, action='append', default=[], help='URL of peer WaddleServer to connect to.')
-    parser.add_argument('--db-root', type=str, default='.waddle')
-    parser.add_argument('--log-root', type=str, default=os.path.join('.waddle', 'logs'))
-    args = parser.parse_args()
-    main(port=args.server_port, bind=args.server_bind, log_level=args.log_level, peers=args.peer)

@@ -60,8 +60,8 @@ if __name__ == "__main__":
     parser.add_argument('--server-bind', type=str, default='127.0.0.1')
     parser.add_argument('--server-url', type=str, default=None)
     parser.add_argument('--db-root', type=str, default='.waddle')
-    parser.add_argument('--project', type=str, default='experiment')
-    parser.add_argument('--watch-folder', type=str, default=None)
+    parser.add_argument('--log-root', type=str, default=None)
+    parser.add_argument("--peer", type=str, action='append', default=[], help='URL of peer WaddleServer to connect to.')
     args = parser.parse_args()
 
     if args.mode == 'server':
