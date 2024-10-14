@@ -78,14 +78,13 @@ class WaddleServer:
         self.log_root = log_root or os.path.join(db_root, "logs")
         self.loop = loop or asyncio.get_event_loop()
         self.watch_delay = watch_delay
+        self.watching_logs = True
 
         self.peers = peers or []
         self.peer_tasks = []
         self.peer_ws_clients = {}
 
         self._initialize_database()
-
-        self.watching_logs = True
 
     def _initialize_database(self):
         self.con = duckdb.connect(self.db_path)
@@ -142,8 +141,9 @@ class WaddleServer:
             await self.watch_task
 
         # Disconnect from peers
-        for task in self.peer_tasks:
+        for task, peer in zip(self.peer_tasks, self.peer_ws_clients.values()):
             task.cancel()
+            peer.close()
         await asyncio.gather(*self.peer_tasks, return_exceptions=True)
 
     async def watch_for_logs(self):
