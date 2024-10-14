@@ -417,13 +417,13 @@ async def get_run(project_id: int, run_id: int, history: Optional[int] = 10, fro
         data = []
         for name in df['name']:
             if from_step:
-                df_logs = waddle_server_instance.con.execute("""
+                df = waddle_server_instance.con.execute("""
                     SELECT * FROM logs
                     WHERE run_id = ? AND name = ? AND step >= ?
                     ORDER BY step DESC
                 """, (run_id, name, from_step)).fetchdf()
             else:
-                df_logs = waddle_server_instance.con.execute("""
+                df = waddle_server_instance.con.execute("""
                     SELECT * FROM logs
                     WHERE run_id = ? AND name = ?
                     ORDER BY step DESC LIMIT ?
