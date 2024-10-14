@@ -712,11 +712,15 @@
                 const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
                 ws.onmessage = function(event) {
-                    // Only update if the user is viewing the latest run of the selected project
-                    if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
-                        return;
+                    msg = JSON.parse(event.data);
+                    command = msg.command;
+                    if (command === 'LOG') {
+                        // Only update if the user is viewing the latest run of the selected project
+                        if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
+                            return;
+                        }
+                        applyLogEntry(msg.data);
                     }
-                    applyLogEntry(JSON.parse(event.data));
                 };
 
                 ws.onclose = function(event) {

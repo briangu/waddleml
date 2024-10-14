@@ -9,12 +9,16 @@ from contextlib import asynccontextmanager
 
 import duckdb
 import uvicorn
+import websockets
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
 from datetime import datetime
 from functools import lru_cache
+
+import websockets.legacy
+import websockets.legacy.client
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +133,7 @@ class WaddleServer:
         self.watch_task = asyncio.create_task(self.watch_for_logs())
 
         # Start peer synchronization
-        # self.sync_task = asyncio.create_task(self.sync_with_peers())
+        self.sync_task = asyncio.create_task(self.sync_with_peers())
 
     async def stop(self):
         # Stop log watching
@@ -242,7 +246,7 @@ class WaddleServer:
             log_entry['id'] = log_id
 
             # Broadcast the new log entry to connected WebSocket clients
-            asyncio.run_coroutine_threadsafe(manager.broadcast(log_entry), self.loop)
+            asyncio.run_coroutine_threadsafe(manager.broadcast({"command": "LOG", "data": log_entry}), self.loop)
 
         except Exception as e:
             print("Error ingesting log entry:", log_entry)
@@ -251,21 +255,31 @@ class WaddleServer:
             logger.error(f"Error ingesting log entry: {e}")
             raise
 
-    # async def sync_with_peers(self):
-    #     async with httpx.AsyncClient() as client:
-    #         for peer_url in self.peers:
-    #             task = asyncio.create_task(self.sync_with_peer(peer_url, client))
-    #             self.peer_tasks.append(task)
+    async def sync_with_peers(self):
+        for peer_url in self.peers:
+            task = asyncio.create_task(self.sync_with_peer(peer_url))
+            self.peer_tasks.append(task)
 
-    async def sync_with_peer(self, peer_url, client):
+    async def sync_with_peer(self, peer_url):
         try:
             logger.info(f"Starting synchronization with peer: {peer_url}")
 
-            # Initial synchronization
-            await self.initial_sync(peer_url, client)
+            ws_url = peer_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+            logger.info(f"Connecting to peer WebSocket at {ws_url}")
 
-            # Connect to peer's WebSocket for live updates
-            await self.connect_peer_websocket(peer_url, client)
+            async with websockets.connect(ws_url) as websocket:
+                logger.info(f"Connected to peer WebSocket at {ws_url}")
+
+                self.peer_ws_clients[peer_url] = websocket
+
+                # Initial synchronization
+                await websocket.send_json({"command": "GET_PROJECTS"})
+
+                async for message in websocket:
+                    message = json.loads(message)
+                    response = await self.handle_ws_message(message, websocket, peer_url)
+                    if response:
+                        await websocket.send_json(response)
 
         except asyncio.CancelledError:
             logger.info(f"Sync task with peer {peer_url} has been cancelled.")
@@ -273,61 +287,83 @@ class WaddleServer:
             logger.error(f"Error syncing with peer {peer_url}: {e}")
             # Optionally implement retry logic here
 
-    async def initial_sync(self, peer_url, client):
+    async def handle_ws_message(self, message, websocket, peer_url=None):
         try:
-            # Fetch projects from peer
-            projects_resp = await client.get(f"{peer_url}/projects")
-            projects_resp.raise_for_status()
-            peer_projects = projects_resp.json()
+            if message['command'] == "GET_PROJECTS":
+                projects = await get_project_info()
+                return {"command": "PROJECTS", "data": projects}
 
-            # Fetch local projects
-            local_projects = self.con.execute("SELECT name FROM project_info").fetchall()
-            local_project_names = set(p[0] for p in local_projects)
+            elif message['command'] == "GET_RUNS":
+                runs = await get_project_runs(message['project_id'])
+                return {"command": "RUNS", "project_id": message['project_id'], "data": runs}
 
-            # Determine which projects to sync
-            for project in peer_projects:
-                project_name = project['name']
-                if project_name not in local_project_names:
-                    logger.info(f"Synchronizing project: {project_name}")
-                    project_id = project['id']
+            elif message['command'] == "GET_RUN":
+                run = await get_run(message['project_id'], message['run_id'], message.get('history', 10))
+                return {"command": "RUN", "project_id": message['project_id'], "run_id": message['run_id'], "data": run}
 
-                    # Fetch runs for the project
-                    runs_resp = await client.get(f"{peer_url}/projects/{project_id}/runs")
-                    runs_resp.raise_for_status()
-                    peer_runs = runs_resp.json()
+            elif message['command'] == "LOG":
+                self._ingest_log_entry(message['data'])
+                return None
 
-                    for run in peer_runs:
-                        run_id = run['id']
-                        logger.info(f"Synchronizing run: {run_id} for project: {project_name}")
+            elif message['command'] == "PROJECTS":
+                peer_projects = message['data']
+                logger.info(f"Received projects from peer: {peer_projects}")
 
-                        # Fetch run details
-                        run_detail_resp = await client.get(f"{peer_url}/projects/{project_id}/runs/{run_id}")
-                        run_detail_resp.raise_for_status()
-                        run_logs = run_detail_resp.json()
+                # Fetch local projects
+                local_projects = await get_project_info()
+                local_project_names = set(p['name'] for p in local_projects)
 
-                        for log_entry in run_logs:
-                            self._ingest_log_entry(log_entry['data'])
+                # Determine which projects to sync
+                for project in peer_projects:
+                    project_name = project['name']
+                    if project_name not in local_project_names:
+                        logger.info(f"Synchronizing project: {project_name}")
+                        project_id = project['id']
 
-            logger.info(f"Initial synchronization with peer {peer_url} completed.")
+                        # Send GET_RUNS command over websocket
+                        await websocket.send_json({"command": "GET_RUNS", "project_id": project_id})
+                logger.info(f"Initial synchronization with peer {peer_url} completed.")
+
+            elif message['command'] == "RUNS":
+                project_id = message['project_id']
+                peer_runs = message['data']
+
+                # Fetch local runs for this project
+                local_runs = await get_project_runs(project_id)
+                local_run_ids = set(run['id'] for run in local_runs)
+
+                # Determine which runs to sync
+                for run in peer_runs:
+                    run_id = run['id']
+                    if run_id not in local_run_ids:
+                        logger.info(f"Synchronizing run: {run_id} for project: {project_id}")
+
+                        # Send GET_RUN command over websocket
+                        await websocket.send_json({
+                            "command": "GET_RUN",
+                            "project_id": project_id,
+                            "run_id": run_id,
+                            "history": 1000  # or any number of entries you want
+                        })
+
+            elif message['command'] == "RUN":
+                project_id = message['project_id']
+                run_id = message['run_id']
+                run_logs = message['data']
+
+                # Ingest run logs
+                for log_entry in run_logs:
+                    self._ingest_log_entry(log_entry)
+                logger.info(f"Synchronized run {run_id} for project {project_id}")
+
+            else:
+                logger.warning(f"Unknown command received: {message['command']}")
 
         except Exception as e:
-            logger.error(f"Failed initial synchronization with peer {peer_url}: {e}")
-
-    async def connect_peer_websocket(self, peer_url, client):
-        try:
-            ws_url = peer_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
-            logger.info(f"Connecting to peer WebSocket at {ws_url}")
-
-            async with client.websocket(ws_url) as websocket:
-                logger.info(f"Connected to peer WebSocket at {ws_url}")
-                async for message in websocket.iter_text():
-                    log_entry = json.loads(message)
-                    logger.debug(f"Received log entry from peer {peer_url}: {log_entry}")
-                    self._ingest_log_entry(log_entry['data'])
-
-        except Exception as e:
-            logger.error(f"WebSocket connection to peer {peer_url} failed: {e}")
-            # Optionally implement reconnection logic here
+            logger.error(f"Error handling message {message}: {e}")
+            # Optionally send an error message back
+            if websocket:
+                await websocket.send_json({"command": "ERROR", "message": str(e)})
 
 
 def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -341,7 +377,7 @@ def sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @app.get("/projects")
-async def get_info():
+async def get_project_info():
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
@@ -351,7 +387,7 @@ async def get_info():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/projects/{project_id}/runs")
-async def get_runs(project_id: int):
+async def get_project_runs(project_id: int):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
@@ -410,13 +446,15 @@ async def get_static(filename: str):
     filepath = os.path.join(os.path.dirname(__file__), "static", filename)
     return FileResponse(filepath)
 
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()  # Keep the connection open
+            msg = await websocket.receive_json()
+            response = await waddle_server_instance.handle_ws_message(msg, websocket)
+            if response:
+                await websocket.send_json(response)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
