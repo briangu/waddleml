@@ -6,6 +6,7 @@ import os
 import logging
 import time
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import duckdb
 import uvicorn
@@ -19,6 +20,7 @@ from functools import lru_cache
 
 import websockets.legacy
 import websockets.legacy.client
+
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +300,7 @@ class WaddleServer:
                 return {"command": "RUNS", "project_id": message['project_id'], "data": runs}
 
             elif message['command'] == "GET_RUN":
-                run = await get_run(message['project_id'], message['run_id'], message.get('history', 10))
+                run = await get_run(message['project_id'], message['run_id'], from_step=message.get('from_step', 0))
                 return {"command": "RUN", "project_id": message['project_id'], "run_id": message['run_id'], "data": run}
 
             elif message['command'] == "LOG":
@@ -330,7 +332,7 @@ class WaddleServer:
 
                 # Fetch local runs for this project
                 local_runs = await get_project_runs(project_id)
-                local_run_ids = set(run['id'] for run in local_runs)
+                local_run_ids = {run['id']: run['steps'] for run in local_runs}
 
                 # Determine which runs to sync
                 for run in peer_runs:
@@ -343,7 +345,7 @@ class WaddleServer:
                             "command": "GET_RUN",
                             "project_id": project_id,
                             "run_id": run_id,
-                            "history": 1000  # or any number of entries you want
+                            "from_step": local_run_ids.get(run_id, 0)
                         })
 
             elif message['command'] == "RUN":
@@ -397,9 +399,9 @@ async def get_project_runs(project_id: int):
                 project_id,
                 start_time,
                 data,
-                (SELECT COUNT(id) FROM logs WHERE run_id=id) as rows
+                (SELECT COUNT(id) FROM logs WHERE run_id=id) as steps
             FROM run_info
-            WHERE project_id = ? AND rows > 0
+            WHERE project_id = ? AND steps > 0
             ORDER BY start_time DESC
         """, (project_id,)).fetchdf()
         df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
@@ -411,7 +413,7 @@ async def get_project_runs(project_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/projects/{project_id}/runs/{run_id}")
-async def get_run(project_id: int, run_id: int, history: int = 10):
+async def get_run(project_id: int, run_id: int, history: Optional[int] = 10, from_step: Optional[int] = None):
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
@@ -420,11 +422,18 @@ async def get_run(project_id: int, run_id: int, history: int = 10):
         # for each name then get the history of that name and collect it in a list
         data = []
         for name in df['name']:
-            df_logs = waddle_server_instance.con.execute("""
-                SELECT * FROM logs
-                WHERE run_id = ? AND name = ?
-                ORDER BY step DESC LIMIT ?
-            """, (run_id, name, history)).fetchdf()
+            if from_step:
+                df_logs = waddle_server_instance.con.execute("""
+                    SELECT * FROM logs
+                    WHERE run_id = ? AND name = ? AND step >= ?
+                    ORDER BY step DESC
+                """, (run_id, name, from_step)).fetchdf()
+            else:
+                df_logs = waddle_server_instance.con.execute("""
+                    SELECT * FROM logs
+                    WHERE run_id = ? AND name = ?
+                    ORDER BY step DESC LIMIT ?
+                """, (run_id, name, history)).fetchdf()
             clean_df = sanitize_df(df_logs)
             data.extend(clean_df.to_dict(orient='records'))
         logger.info(f"Returning {len(data)} records for run {run_id}")
