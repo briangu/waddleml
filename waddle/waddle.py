@@ -15,12 +15,12 @@ from typing import Any, Dict, Optional
 import uuid
 
 class WaddleLogger:
-    def __init__(self, db_root, project, name=None, config=None, use_gpu_metrics=True):
-        self.db_root = db_root
+    def __init__(self, log_root, project, name=None, config=None, use_gpu_metrics=True):
+        self.log_root = log_root
         self.project = project
         self.name = name or datetime.now().strftime('%Y%m%d_%H%M%S')
         self.id = f"{self.project}_{self.name}"
-        self.log_path = os.path.join(db_root, "logs")
+        self.log_path = os.path.join(log_root, "logs")
         os.makedirs(self.log_path, exist_ok=True)
         self.config: argparse.Namespace = config
         self.use_gpu_metrics = use_gpu_metrics
@@ -197,7 +197,7 @@ def init(project, log_root='.waddle/logs', config=None, use_gpu_metrics=True, gp
             print(f"Could not initialize NVML: {e}")
             use_gpu_metrics = False
 
-    run = WaddleLogger(db_root=log_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config)
+    run = WaddleLogger(log_root=log_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config)
 
     print("Waddle Logger initialized.")
     print("Run ID:", run.id)
