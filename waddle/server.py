@@ -145,7 +145,7 @@ class WaddleServer:
         # Disconnect from peers
         for task, peer in zip(self.peer_tasks, self.peer_ws_clients.values()):
             task.cancel()
-            peer.close()
+            await peer.close()
         await asyncio.gather(*self.peer_tasks, return_exceptions=True)
 
     async def watch_for_logs(self):
@@ -300,11 +300,11 @@ class WaddleServer:
 
             elif message['command'] == "GET_RUNS":
                 runs = await get_project_runs(message['project_id'], convert_timestamps=True)
-                return {"command": "RUNS", "project_id": message['project_id'], "data": [json.loads(x["data"]) for x in runs]}
+                return {"command": "RUNS", "project_id": message['project_id'], "data": runs}
 
             elif message['command'] == "GET_RUN":
                 run = await get_run(message['project_id'], message['run_id'], from_step=message.get('from_step', 0), convert_timestamps=True)
-                return {"command": "RUN", "project_id": message['project_id'], "run_id": message['run_id'], "data": [json.loads(x["data"]) for x in run]}
+                return {"command": "RUN", "project_id": message['project_id'], "run_id": message['run_id'], "data": run}
 
             elif message['command'] == "LOG":
                 self._ingest_log_entry(message['data'])
@@ -358,13 +358,15 @@ class WaddleServer:
 
                 # Ingest run logs
                 for log_entry in run_logs:
-                    self._ingest_log_entry(log_entry)
+                    self._ingest_log_entry(json.loads(log_entry['data']))
                 logger.info(f"Synchronized run {run_id} for project {project_id}")
 
             else:
                 logger.warning(f"Unknown command received: {message['command']}")
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"Error handling message {message}: {e}")
             # Optionally send an error message back
             if websocket:
