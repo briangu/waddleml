@@ -83,15 +83,13 @@ class WaddleServer:
         self.peer_tasks = []
         self.peer_ws_clients = {}
 
-        self.con = duckdb.connect(self.db_path)
-
-        # Initialize database tables
         self._initialize_database()
 
-        # For log watching
-        self.watching = True
+        self.watching_logs = True
 
     def _initialize_database(self):
+        self.con = duckdb.connect(self.db_path)
+
         self.con.execute('''
             CREATE SEQUENCE IF NOT EXISTS seq_project_info START 1;
             CREATE TABLE IF NOT EXISTS project_info (
@@ -139,7 +137,7 @@ class WaddleServer:
 
     async def stop(self):
         # Stop log watching
-        self.watching = False
+        self.watching_logs = False
         if hasattr(self, 'watch_task'):
             await self.watch_task
 
@@ -149,7 +147,7 @@ class WaddleServer:
         await asyncio.gather(*self.peer_tasks, return_exceptions=True)
 
     async def watch_for_logs(self):
-        while self.watching:
+        while self.watching_logs:
             logger.info(f"{time.time()} Watching folder for logs...")
 
             # Get all directories recursively
