@@ -47,8 +47,16 @@
             overflow-y: auto;
         }
 
-        /* Project selection dropdown */
-        #project-select {
+        /* Project header styles */
+        #project-header {
+            display: none; /* Hide by default */
+            padding: 20px;
+            background-color: #e0e0e0;
+        }
+
+        /* Project selection dropdown styles */
+        #project-select-sidebar,
+        #project-select-header {
             width: 100%;
             padding: 8px;
             margin-bottom: 20px;
@@ -185,6 +193,10 @@
                 display: none; /* Hide the sidebar on small screens */
             }
 
+            #project-header {
+                display: block; /* Show the project header on small screens */
+            }
+
             #content {
                 width: 100%;
             }
@@ -228,14 +240,20 @@
     </div>
     <div id="main-container">
         <div id="sidebar">
-            <!-- Project selection dropdown -->
-            <select id="project-select">
+            <!-- Project selection dropdown for desktop -->
+            <select id="project-select-sidebar">
                 <option value="" disabled>Loading projects...</option>
             </select>
             <!-- Runs will be dynamically inserted here -->
             <div id="runs-list">
                 <ul></ul>
             </div>
+        </div>
+        <div id="project-header">
+            <!-- Project selection dropdown for mobile -->
+            <select id="project-select-header">
+                <option value="" disabled>Loading projects...</option>
+            </select>
         </div>
         <div id="content">
             <div id="charts-container">
@@ -457,29 +475,37 @@
             }
 
             /**
-             * Function to populate the projects dropdown.
+             * Function to populate the projects dropdowns.
              */
             function populateProjectsDropdown() {
-                const projectSelect = document.getElementById('project-select');
-                if (!projectSelect) {
-                    console.error('Project select element not found in the DOM.');
+                const projectSelectSidebar = document.getElementById('project-select-sidebar');
+                const projectSelectHeader = document.getElementById('project-select-header');
+                if (!projectSelectSidebar || !projectSelectHeader) {
+                    console.error('Project select elements not found in the DOM.');
                     return;
                 }
 
                 // Clear existing options
-                projectSelect.innerHTML = '';
+                projectSelectSidebar.innerHTML = '';
+                projectSelectHeader.innerHTML = '';
 
                 projects.forEach((project, index) => {
-                    const option = document.createElement('option');
-                    option.value = project.id;
-                    option.textContent = project.name;
-                    projectSelect.appendChild(option);
+                    const optionSidebar = document.createElement('option');
+                    optionSidebar.value = project.id;
+                    optionSidebar.textContent = project.name;
+                    projectSelectSidebar.appendChild(optionSidebar);
+
+                    const optionHeader = document.createElement('option');
+                    optionHeader.value = project.id;
+                    optionHeader.textContent = project.name;
+                    projectSelectHeader.appendChild(optionHeader);
                 });
 
                 // Select the first project by default
                 if (projects.length > 0) {
                     selectedProjectId = projects[0].id;
-                    projectSelect.value = selectedProjectId;
+                    projectSelectSidebar.value = selectedProjectId;
+                    projectSelectHeader.value = selectedProjectId;
                 }
             }
 
@@ -685,7 +711,7 @@
                         return;
                     }
 
-                    // Populate the projects dropdown
+                    // Populate the projects dropdowns
                     populateProjectsDropdown();
 
                     // Update the dashboard title
@@ -708,8 +734,8 @@
                 const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
                 ws.onmessage = function(event) {
-                    msg = JSON.parse(event.data);
-                    command = msg.command;
+                    const msg = JSON.parse(event.data);
+                    const command = msg.command;
                     if (command === 'LOG') {
                         // Only update if the user is viewing the latest run of the selected project
                         if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
@@ -734,23 +760,33 @@
              * Utility function to generate a random color for chart lines.
              * Ensures that each chart has a distinct color.
              */
-            function getRandomColor() {
-                const letters = '0123456789ABCDEF';
-                let color = '#';
-                for (let i = 0; i < 6; i++) {
-                    color += letters[Math.floor(Math.random() * 16)];
-                }
-                return color;
+             function getRandomColor() {
+                // const letters = '01234567'; // Limit to lower half for darker shades
+                // let color = '#';
+                // for (let i = 0; i < 6; i++) {
+                //     color += letters[Math.floor(Math.random() * letters.length)];
+                // }
+                // return color;
+
+                // return reddish color
+                return 'rgb(0, 99, 132)';
             }
 
             // Initialize the dashboard
             initializeDashboard();
             setupWebSocket();
 
-            // Add event listener for project selection
-            const projectSelect = document.getElementById('project-select');
-            projectSelect.addEventListener('change', function(event) {
+            // Add event listeners for project selection on both dropdowns
+            const projectSelectSidebar = document.getElementById('project-select-sidebar');
+            const projectSelectHeader = document.getElementById('project-select-header');
+
+            function handleProjectSelection(event) {
                 const selectedProjectId = event.target.value;
+
+                // Update both dropdowns to reflect the selection
+                projectSelectSidebar.value = selectedProjectId;
+                projectSelectHeader.value = selectedProjectId;
+
                 // Update the dashboard title
                 const selectedProject = projects.find(p => p.id === selectedProjectId);
                 const dashboardTitle = document.getElementById('dashboard-title');
@@ -758,7 +794,10 @@
 
                 // Handle project change
                 onProjectChange(selectedProjectId);
-            });
+            }
+
+            projectSelectSidebar.addEventListener('change', handleProjectSelection);
+            projectSelectHeader.addEventListener('change', handleProjectSelection);
         });
     </script>
 </body>
