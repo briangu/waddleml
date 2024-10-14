@@ -31,12 +31,13 @@ async def lifespan(app: FastAPI):
     global waddle_server_instance
     parser = argparse.ArgumentParser()
     parser.add_argument('--db-root', type=str, default='.waddle')
-    parser.add_argument('--log-root', type=str, default=os.path.join('.waddle', 'logs'))
-    parser.add_argument('--peer', type=str, action='append', default=[], help='URL of peer WaddleServer to connect to.')
+    parser.add_argument('--log-root', type=str, default=None, help="Directory to watch for log files.")
+    parser.add_argument('--watch-delay', type=int, default=10, help="Delay in seconds between watching for new log files.")
+    parser.add_argument('--peer', type=str, action='append', default=[], help='URL of peer WaddleServer to source data from.')
     args, _ = parser.parse_known_args()
 
     loop = asyncio.get_running_loop()
-    waddle_server_instance = WaddleServer(db_root=args.db_root, log_root=args.log_root, loop=loop, peers=args.peer)
+    waddle_server_instance = WaddleServer(db_root=args.db_root, log_root=args.log_root, loop=loop, peers=args.peer, watch_delay=args.watch_delay)
     await waddle_server_instance.start()
     try:
         yield
@@ -75,10 +76,10 @@ manager = ConnectionManager()
 class WaddleServer:
     def __init__(self, db_root, log_root=None, loop=None, peers=None, watch_delay=10):
         self.db_path = os.path.join(db_root, f"waddle.db")
-        self.log_root = log_root or os.path.join(db_root, "logs")
+        self.log_root = log_root
         self.loop = loop or asyncio.get_event_loop()
         self.watch_delay = watch_delay
-        self.watching_logs = True
+        self.watching_logs = self.log_root is not None
 
         self.peers = peers or []
         self.peer_tasks = []
