@@ -54,23 +54,18 @@ async def websocket_client(uri):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, choices=['server', 'client'], default='server')
     parser.add_argument('--log-level', type=str, default='critical')
     parser.add_argument('--server-port', type=int, default=8000)
     parser.add_argument('--server-bind', type=str, default='127.0.0.1')
-    parser.add_argument('--server-url', type=str, default=None)
     parser.add_argument('--db-root', type=str, default='.waddle')
     parser.add_argument('--log-root', type=str, default=None)
     parser.add_argument("--peer", type=str, action='append', default=[], help='URL of peer WaddleServer to connect to.')
     args = parser.parse_args()
 
-    if args.mode == 'server':
-        # Start the Waddle server
-        server_main.main(
-            port=args.server_port,
-            bind=args.server_bind,
-            log_level=args.log_level,
-        )
-    elif args.mode == 'client':
-        server_url = args.server_url or f'ws://{args.bind}:{args.server_port}/ws'
-        asyncio.run(websocket_client(server_url))
+    # TODO: add back push to peer (centralised server) functionality
+
+    server_main.main(
+        port=args.server_port,
+        bind=args.server_bind,
+        log_level=args.log_level,
+    )

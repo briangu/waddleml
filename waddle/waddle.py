@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional
 import uuid
 
 class WaddleLogger:
-    def __init__(self, db_root, project, name=None, config=None, use_gpu_metrics=True, server_url=None):
+    def __init__(self, db_root, project, name=None, config=None, use_gpu_metrics=True):
         self.db_root = db_root
         self.project = project
         self.name = name or datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -23,7 +23,6 @@ class WaddleLogger:
         os.makedirs(self.log_path, exist_ok=True)
         self.config: argparse.Namespace = config
         self.use_gpu_metrics = use_gpu_metrics
-        self.server_url = server_url
 
         # Log initial system, CLI parameters, and code
         self.log_run_info()
@@ -179,7 +178,7 @@ def _assign_config(app_config):
     global config
     config = app_config
 
-def init(project, log_root='.waddle/logs', config=None, use_gpu_metrics=True, gpu_metrics_interval=60, server_url=None, server_port=8000, server_bind="127.0.0.1"):
+def init(project, log_root='.waddle/logs', config=None, use_gpu_metrics=True, gpu_metrics_interval=60):
     global run
     global server_process
 
@@ -197,18 +196,7 @@ def init(project, log_root='.waddle/logs', config=None, use_gpu_metrics=True, gp
             print(f"Could not initialize NVML: {e}")
             use_gpu_metrics = False
 
-    if server_url is None:
-        # Start the waddle server as a subprocess
-        server_cmd = ['waddle', '--mode', 'server', '--server-port', str(server_port), '--server-bind', server_bind, '--db-root', log_root, '--project', project, '--watch-folder', os.path.join(log_root, project)]
-        server_process = subprocess.Popen(server_cmd)
-        # Allow the server some time to start
-        time.sleep(2)
-        server_url = 'http://localhost:8000'
-    else:
-        if not server_url:
-            raise ValueError("In distributed mode, server_url must be specified.")
-
-    run = WaddleLogger(db_root=log_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config, server_url=server_url)
+    run = WaddleLogger(db_root=log_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config)
 
     print("Waddle Logger initialized.")
     print("Run ID:", run.id)
