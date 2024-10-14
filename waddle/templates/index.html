@@ -749,7 +749,7 @@
                     const command = msg.command;
                     if (command === 'LOG') {
                         // Only update if the user is viewing the latest run of the selected project
-                        if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
+                        if (selectedRunId !== msg.data.run_id || selectedProjectId !== msg.data.project_id || !isInitialLoadComplete) {
                             return;
                         }
                         applyLogEntry(msg.data);
