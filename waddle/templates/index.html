@@ -306,7 +306,7 @@
              * @param {string} category - The name of the category.
              * @param {string} name - The name of the chart.
              */
-            function createChartForName(category, name, value_count) {
+             function createChartForName(category, name, value_count, chartType = 'line') {
                 // Ensure the category section exists
                 let categorySection = categories[category]?.section;
                 if (!categorySection) {
@@ -392,42 +392,44 @@
                     chartsWrapper.appendChild(chartContainer);
                 }
 
+                // Initialize chart data
                 const chartData = {
                     labels: [],
+                    datasets: []
                 };
 
-                // Initialize chart data
-                if (value_count > 1) {
-                    chartData.datasets = [];
+                if (chartType === 'bar') {
+                    // For histograms, we usually have one dataset
+                    chartData.datasets.push({
+                        label: name,
+                        data: [],
+                        backgroundColor: getRandomColor(),
+                        borderColor: getRandomColor(),
+                        borderWidth: 1
+                    });
+                } else {
+                    // Line chart data initialization
                     for (let i = 0; i < value_count; i++) {
                         chartData.datasets.push({
-                            label: name + ' ' + i,
+                            label: value_count > 1 ? name + ' ' + i : name,
                             data: [],
                             borderColor: getRandomColor(),
                             backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
                             tension: 0
                         });
                     }
-                } else {
-                    chartData.datasets = [{
-                        label: name,
-                        data: [],
-                        borderColor: getRandomColor(),
-                        backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
-                        tension: 0
-                    }];
                 }
 
                 // Chart configuration
                 const config = {
-                    type: 'line',
+                    type: chartType,
                     data: chartData,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: false,
+                                display: chartType === 'bar',
                             },
                             title: {
                                 display: false,
@@ -438,11 +440,18 @@
                             x: {
                                 title: {
                                     display: true,
-                                    text: 'Step'
+                                    text: chartType === 'bar' ? 'Bins' : 'Step'
+                                },
+                                ticks: {
+                                    autoSkip: false // Ensures all labels are displayed
                                 }
                             },
                             y: {
-                                beginAtZero: false
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: chartType === 'bar' ? 'Frequency' : 'Value'
+                                }
                             }
                         }
                     }
@@ -622,7 +631,7 @@
                 let data = logEntry?.data || logEntry;
                 logEntry.value = data?.value_double ?? data?.value_bool ?? data?.value_json ?? data?.value_string ?? data?.value ?? logEntry.value;
 
-                // if value is a string then try to convert it to a json object
+                // If value is a string, try to parse it as JSON
                 if (typeof logEntry.value === 'string') {
                     try {
                         logEntry.value = JSON.parse(logEntry.value);
@@ -636,32 +645,50 @@
                     return;
                 }
 
+                // Determine chart type based on value
+                let chartType = 'line';
+                if (typeof logEntry.value === 'object' && !Array.isArray(logEntry.value)) {
+                    console.log("Object value detected, using bar chart for histogram.");
+                    chartType = 'bar'; // Use bar chart for histogram
+                }
+
                 // Create the chart if it doesn't exist
                 if (!categories[category]?.charts[name]) {
+                    console.log('Creating chart:', category, name, chartType, logEntry.value);
                     let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
-                    createChartForName(category, name, value_count);
+                    createChartForName(category, name, value_count, chartType);
+                    console.log(categories[category]?.charts[name].chart.config.type);
                 }
 
                 // Update chart data
                 const chartInfo = categories[category]?.charts[name];
+                console.log('Updating chart:', category, name, chartInfo);
                 if (!chartInfo) {
                     console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
                     return;
                 }
 
-                chartInfo.data.labels.push(logEntry.step);
-                // if value is an array then add each value to the chart
-                if (Array.isArray(logEntry.value)) {
-                    let i = 0;
-                    logEntry.value.forEach(value => {
-                        if (chartInfo.data.datasets[i]) {
-                            chartInfo.data.datasets[i].data.push(value);
-                        }
-                        i += 1;
-                    });
+                if (chartInfo.chart.config.type === 'bar') {
+                    // Histogram data: overwrite existing data
+                    const labels = Object.keys(logEntry.value);
+                    const values = Object.values(logEntry.value);
+                    console.log('Updating bar chart data:', labels, values);
+                    chartInfo.data.labels = labels;
+                    chartInfo.data.datasets[0].data = values;
                 } else {
-                    chartInfo.data.datasets[0].data.push(logEntry.value);
+                    chartInfo.data.labels.push(logEntry.step);
+
+                    if (Array.isArray(logEntry.value)) {
+                        logEntry.value.forEach((value, i) => {
+                            if (chartInfo.data.datasets[i]) {
+                                chartInfo.data.datasets[i].data.push(value);
+                            }
+                        });
+                    } else {
+                        chartInfo.data.datasets[0].data.push(logEntry.value);
+                    }
                 }
+
                 chartInfo.chart.update();
             }
 
@@ -751,9 +778,6 @@
                         // Only update if the user is viewing the latest run of the selected project
                         // TODO: we should subscribe to the selected project and run only
                         if (selectedRunId !== msg.data.run_id || selectedProjectId !== msg.data.project_id || !isInitialLoadComplete) {
-                            console.log("Skipping log entry update.", selectedProjectId, selectedRunId, msg.data.project_id, msg.data.run_id, isInitialLoadComplete);
-                            console.log("run_id", selectedRunId === typeof msg.data.run_id, typeof selectedRunId, typeof msg.data.run_id);
-                            console.log("project_id", selectedProjectId === typeof msg.data.project_id, typeof selectedProjectId, typeof msg.data.project_id);
                             return;
                         }
                         applyLogEntry(msg.data);
