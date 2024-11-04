@@ -429,7 +429,7 @@
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: chartType === 'bar',
+                                display: false,
                             },
                             title: {
                                 display: false,
@@ -443,7 +443,10 @@
                                     text: chartType === 'bar' ? 'Bins' : 'Step'
                                 },
                                 ticks: {
-                                    autoSkip: false // Ensures all labels are displayed
+                                    autoSkip: true // Ensures all labels are displayed
+                                },
+                                grid: {
+                                    display: true
                                 }
                             },
                             y: {
@@ -451,6 +454,9 @@
                                 title: {
                                     display: true,
                                     text: chartType === 'bar' ? 'Frequency' : 'Value'
+                                },
+                                grid: {
+                                    display: true
                                 }
                             }
                         }
