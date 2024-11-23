@@ -14,7 +14,8 @@
 
         body {
             font-family: Arial, sans-serif;
-            background-color: #f9f9f9;
+            background-color: #121212; /* Changed to dark background */
+            color: #e0e0e0; /* Light text for readability */
         }
 
         /* Header styles */
@@ -22,7 +23,7 @@
             display: flex;
             align-items: center;
             padding: 20px;
-            background-color: #f9f9f9;
+            background-color: #1e1e1e; /* Darker header background */
         }
 
         #project-logo {
@@ -32,6 +33,7 @@
 
         #dashboard-title {
             font-size: 2em;
+            color: #ffffff; /* White title for contrast */
         }
 
         /* Main container splits the page into sidebar and content */
@@ -42,16 +44,18 @@
         /* Sidebar styles */
         #sidebar {
             min-width: 200px;
-            background-color: #e0e0e0;
+            background-color: #1e1e1e; /* Dark sidebar background */
             padding: 20px;
             overflow-y: auto;
+            border-right: 1px solid #333; /* Subtle border */
         }
 
         /* Project header styles */
         #project-header {
             display: none; /* Hide by default */
             padding: 20px;
-            background-color: #e0e0e0;
+            background-color: #1e1e1e; /* Darker project header */
+            border-bottom: 1px solid #333; /* Subtle border */
         }
 
         /* Project selection dropdown styles */
@@ -61,8 +65,16 @@
             padding: 8px;
             margin-bottom: 20px;
             border-radius: 4px;
-            border: 1px solid #ccc;
+            border: 1px solid #555; /* Darker border */
+            background-color: #2c2c2c; /* Dark dropdown background */
+            color: #e0e0e0; /* Light text */
             font-size: 14px; /* Default font size */
+        }
+
+        #project-select-sidebar option,
+        #project-select-header option {
+            background-color: #2c2c2c; /* Dark options background */
+            color: #e0e0e0; /* Light option text */
         }
 
         /* Runs list styles */
@@ -77,27 +89,31 @@
 
         #runs-list a {
             text-decoration: none;
-            color: #333;
+            color: #e0e0e0; /* Light text */
             display: block;
             padding: 8px;
             border-radius: 4px;
+            background-color: #2c2c2c; /* Dark link background */
+            transition: background-color 0.3s, color 0.3s;
         }
 
         #runs-list a:hover {
-            background-color: #d0d0d0;
+            background-color: #444; /* Slightly lighter on hover */
+            color: #ffffff; /* White text on hover */
             text-decoration: none;
         }
 
         #runs-list a.selected {
             font-weight: bold;
-            background-color: #b0b0b0;
-            color: #fff;
+            background-color: #555; /* Highlight selected run */
+            color: #ffffff; /* White text */
         }
 
         /* Content area styles */
         #content {
             flex-grow: 1;
             padding: 20px;
+            background-color: #121212; /* Dark content background */
         }
 
         /* Main container for all charts */
@@ -109,15 +125,15 @@
 
         /* Style for each category's <details> element */
         details.category-section {
-            border: 1px solid #ccc;
+            border: 1px solid #333; /* Darker border */
             border-radius: 8px;
-            background-color: #ffffff;
+            background-color: #1e1e1e; /* Dark background */
             overflow: hidden;
             transition: box-shadow 0.3s ease;
         }
 
         details.category-section:hover {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1); /* Subtle light shadow */
         }
 
         /* Style for the summary (header) of each category */
@@ -126,10 +142,11 @@
             font-weight: bold;
             cursor: pointer;
             padding: 15px;
-            background-color: #e0e0e0;
+            background-color: #2c2c2c; /* Darker summary background */
             position: relative;
             list-style: none; /* Remove default disclosure triangle */
             user-select: none;
+            color: #ffffff; /* White text */
         }
 
         /* Custom disclosure triangle */
@@ -139,6 +156,7 @@
             margin-right: 10px;
             transition: transform 0.3s ease;
             font-size: 1em;
+            color: #e0e0e0; /* Light triangle */
         }
 
         details.category-section[open] summary::before {
@@ -151,7 +169,7 @@
             flex-wrap: wrap;
             gap: 20px;
             padding: 15px;
-            background-color: #fafafa;
+            background-color: #1e1e1e; /* Darker charts wrapper */
         }
 
         /* Individual chart container */
@@ -160,11 +178,11 @@
             min-width: 300px;
             height: 300px;
             position: relative;
-            background-color: #fff;
-            border: 1px solid #ddd;
+            background-color: #2c2c2c; /* Dark chart background */
+            border: 1px solid #444; /* Darker border */
             border-radius: 6px;
             padding: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(255,255,255,0.05); /* Subtle light shadow */
             display: flex;
             flex-direction: column;
         }
@@ -175,6 +193,7 @@
             font-size: 1.2em;
             margin-bottom: 10px;
             flex-shrink: 0;
+            color: #ffffff; /* White title */
         }
 
         /* Ensure the canvas fills the container */
@@ -182,6 +201,7 @@
             flex-grow: 1;
             width: 100% !important;
             height: 100% !important;
+            background-color: #2c2c2c !important; /* Match chart background */
         }
 
         /* Responsive Adjustments */
@@ -446,7 +466,8 @@
                                     autoSkip: true // Ensures all labels are displayed
                                 },
                                 grid: {
-                                    display: true
+                                    display: true,
+                                    color: '#444' // Dark grid lines
                                 }
                             },
                             y: {
@@ -456,7 +477,8 @@
                                     text: chartType === 'bar' ? 'Frequency' : 'Value'
                                 },
                                 grid: {
-                                    display: true
+                                    display: true,
+                                    color: '#444' // Dark grid lines
                                 }
                             }
                         }
@@ -527,11 +549,17 @@
                     projectSelectHeader.appendChild(optionHeader);
                 });
 
-                // Select the first project by default
                 if (projects.length > 0) {
-                    selectedProjectId = projects[0].id;
+                    // selectedProjectId = projects[0].id;
+                    // projectSelectSidebar.value = selectedProjectId;
+                    // projectSelectHeader.value = selectedProjectId;
+
+                    // Select the most recently updated project
+                    const mostRecentProject = projects.reduce((prev, current) => {
+                        return (prev.updated_at > current.updated_at) ? prev : current;
+                    });
+                    selectedProjectId = mostRecentProject.id;
                     projectSelectSidebar.value = selectedProjectId;
-                    projectSelectHeader.value = selectedProjectId;
                 }
             }
 
