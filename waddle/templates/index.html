@@ -14,7 +14,8 @@
 
         body {
             font-family: Arial, sans-serif;
-            background-color: #f9f9f9;
+            background-color: #121212; /* Changed to dark background */
+            color: #e0e0e0; /* Light text for readability */
         }
 
         /* Header styles */
@@ -22,7 +23,7 @@
             display: flex;
             align-items: center;
             padding: 20px;
-            background-color: #f9f9f9;
+            background-color: #1e1e1e; /* Darker header background */
         }
 
         #project-logo {
@@ -32,6 +33,7 @@
 
         #dashboard-title {
             font-size: 2em;
+            color: #ffffff; /* White title for contrast */
         }
 
         /* Main container splits the page into sidebar and content */
@@ -42,33 +44,76 @@
         /* Sidebar styles */
         #sidebar {
             min-width: 200px;
-            background-color: #e0e0e0;
+            background-color: #1e1e1e; /* Dark sidebar background */
             padding: 20px;
             overflow-y: auto;
+            border-right: 1px solid #333; /* Subtle border */
         }
 
-        #sidebar ul {
+        /* Project header styles */
+        #project-header {
+            display: none; /* Hide by default */
+            padding: 20px;
+            background-color: #1e1e1e; /* Darker project header */
+            border-bottom: 1px solid #333; /* Subtle border */
+        }
+
+        /* Project selection dropdown styles */
+        #project-select-sidebar,
+        #project-select-header {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            border: 1px solid #555; /* Darker border */
+            background-color: #2c2c2c; /* Dark dropdown background */
+            color: #e0e0e0; /* Light text */
+            font-size: 14px; /* Default font size */
+        }
+
+        #project-select-sidebar option,
+        #project-select-header option {
+            background-color: #2c2c2c; /* Dark options background */
+            color: #e0e0e0; /* Light option text */
+        }
+
+        /* Runs list styles */
+        #runs-list ul {
             list-style-type: none;
             padding: 0;
         }
 
-        #sidebar li {
+        #runs-list li {
             margin-bottom: 10px;
         }
 
-        #sidebar a {
+        #runs-list a {
             text-decoration: none;
-            color: #333;
+            color: #e0e0e0; /* Light text */
+            display: block;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #2c2c2c; /* Dark link background */
+            transition: background-color 0.3s, color 0.3s;
         }
 
-        #sidebar a:hover {
-            text-decoration: underline;
+        #runs-list a:hover {
+            background-color: #444; /* Slightly lighter on hover */
+            color: #ffffff; /* White text on hover */
+            text-decoration: none;
+        }
+
+        #runs-list a.selected {
+            font-weight: bold;
+            background-color: #555; /* Highlight selected run */
+            color: #ffffff; /* White text */
         }
 
         /* Content area styles */
         #content {
             flex-grow: 1;
             padding: 20px;
+            background-color: #121212; /* Dark content background */
         }
 
         /* Main container for all charts */
@@ -80,15 +125,15 @@
 
         /* Style for each category's <details> element */
         details.category-section {
-            border: 1px solid #ccc;
+            border: 1px solid #333; /* Darker border */
             border-radius: 8px;
-            background-color: #ffffff;
+            background-color: #1e1e1e; /* Dark background */
             overflow: hidden;
             transition: box-shadow 0.3s ease;
         }
 
         details.category-section:hover {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1); /* Subtle light shadow */
         }
 
         /* Style for the summary (header) of each category */
@@ -97,10 +142,11 @@
             font-weight: bold;
             cursor: pointer;
             padding: 15px;
-            background-color: #e0e0e0;
+            background-color: #2c2c2c; /* Darker summary background */
             position: relative;
             list-style: none; /* Remove default disclosure triangle */
             user-select: none;
+            color: #ffffff; /* White text */
         }
 
         /* Custom disclosure triangle */
@@ -110,6 +156,7 @@
             margin-right: 10px;
             transition: transform 0.3s ease;
             font-size: 1em;
+            color: #e0e0e0; /* Light triangle */
         }
 
         details.category-section[open] summary::before {
@@ -122,7 +169,7 @@
             flex-wrap: wrap;
             gap: 20px;
             padding: 15px;
-            background-color: #fafafa;
+            background-color: #1e1e1e; /* Darker charts wrapper */
         }
 
         /* Individual chart container */
@@ -131,11 +178,11 @@
             min-width: 300px;
             height: 300px;
             position: relative;
-            background-color: #fff;
-            border: 1px solid #ddd;
+            background-color: #2c2c2c; /* Dark chart background */
+            border: 1px solid #444; /* Darker border */
             border-radius: 6px;
             padding: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(255,255,255,0.05); /* Subtle light shadow */
             display: flex;
             flex-direction: column;
         }
@@ -146,6 +193,7 @@
             font-size: 1.2em;
             margin-bottom: 10px;
             flex-shrink: 0;
+            color: #ffffff; /* White title */
         }
 
         /* Ensure the canvas fills the container */
@@ -153,6 +201,7 @@
             flex-grow: 1;
             width: 100% !important;
             height: 100% !important;
+            background-color: #2c2c2c !important; /* Match chart background */
         }
 
         /* Responsive Adjustments */
@@ -163,6 +212,10 @@
 
             #sidebar {
                 display: none; /* Hide the sidebar on small screens */
+            }
+
+            #project-header {
+                display: block; /* Show the project header on small screens */
             }
 
             #content {
@@ -177,6 +230,11 @@
                 flex: 1 1 100%;
                 min-width: unset;
                 height: 300px;
+            }
+
+            /* Increase the font size of the project chooser on mobile */
+            #project-select-header {
+                font-size: 16px;
             }
         }
 
@@ -198,6 +256,11 @@
                 font-size: 1em;
                 margin-bottom: 8px;
             }
+
+            /* Further increase the font size on smaller screens */
+            #project-select-header {
+                font-size: 18px;
+            }
         }
     </style>
 </head>
@@ -208,7 +271,20 @@
     </div>
     <div id="main-container">
         <div id="sidebar">
+            <!-- Project selection dropdown for desktop -->
+            <select id="project-select-sidebar">
+                <option value="" disabled>Loading projects...</option>
+            </select>
             <!-- Runs will be dynamically inserted here -->
+            <div id="runs-list">
+                <ul></ul>
+            </div>
+        </div>
+        <div id="project-header">
+            <!-- Project selection dropdown for mobile -->
+            <select id="project-select-header">
+                <option value="" disabled>Loading projects...</option>
+            </select>
         </div>
         <div id="content">
             <div id="charts-container">
@@ -234,26 +310,23 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            let isInitialLoadComplete = false;
-
             // Object to hold chart instances organized by category
             const categories = {};
 
-            // Keep track of the selected run
-            let project_data = null;
-            let project_runs = null;
-
+            // Keep track of projects and runs
+            let projects = [];
+            let selectedProjectId = null;
+            let runs = [];
             let selectedRunId = null;
             let latestRunId = null;
+            let isInitialLoadComplete = false;
 
             /**
              * Function to create a new chart within a specified category.
              * @param {string} category - The name of the category.
              * @param {string} name - The name of the chart.
              */
-            function createChartForName(category, name, value_count) {
-                // console.log(`Creating chart "${name}" under category "${category}"`);
-
+             function createChartForName(category, name, value_count, chartType = 'line') {
                 // Ensure the category section exists
                 let categorySection = categories[category]?.section;
                 if (!categorySection) {
@@ -296,7 +369,7 @@
                 const chartContainer = document.createElement('div');
                 chartContainer.className = 'chart-container';
 
-                // Optional: Add a title for the chart
+                // Add a title for the chart
                 const chartTitle = document.createElement('div');
                 chartTitle.className = 'chart-title';
                 chartTitle.textContent = name;
@@ -339,35 +412,37 @@
                     chartsWrapper.appendChild(chartContainer);
                 }
 
+                // Initialize chart data
                 const chartData = {
                     labels: [],
+                    datasets: []
                 };
 
-                // Initialize chart data
-                if (value_count > 1) {
-                    chartData.datasets = [];
+                if (chartType === 'bar') {
+                    // For histograms, we usually have one dataset
+                    chartData.datasets.push({
+                        label: name,
+                        data: [],
+                        backgroundColor: getRandomColor(),
+                        borderColor: getRandomColor(),
+                        borderWidth: 1
+                    });
+                } else {
+                    // Line chart data initialization
                     for (let i = 0; i < value_count; i++) {
                         chartData.datasets.push({
-                            label: name + ' ' + i,
+                            label: value_count > 1 ? name + ' ' + i : name,
                             data: [],
                             borderColor: getRandomColor(),
                             backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
                             tension: 0
                         });
                     }
-                } else {
-                    chartData.datasets = [{
-                        label: name,
-                        data: [],
-                        borderColor: getRandomColor(),
-                        backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
-                        tension: 0
-                    }];
                 }
 
                 // Chart configuration
                 const config = {
-                    type: 'line',
+                    type: chartType,
                     data: chartData,
                     options: {
                         responsive: true,
@@ -385,11 +460,26 @@
                             x: {
                                 title: {
                                     display: true,
-                                    text: 'Step'
+                                    text: chartType === 'bar' ? 'Bins' : 'Step'
+                                },
+                                ticks: {
+                                    autoSkip: true // Ensures all labels are displayed
+                                },
+                                grid: {
+                                    display: true,
+                                    color: '#444' // Dark grid lines
                                 }
                             },
                             y: {
-                                beginAtZero: false
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: chartType === 'bar' ? 'Frequency' : 'Value'
+                                },
+                                grid: {
+                                    display: true,
+                                    color: '#444' // Dark grid lines
+                                }
                             }
                         }
                     }
@@ -403,7 +493,6 @@
                         chart: chart,
                         data: chartData
                     };
-                    // console.log(`Chart "${name}" under category "${category}" created and stored.`);
                 } catch (error) {
                     console.error(`Error creating chart "${name}" under category "${category}":`, error);
                 }
@@ -434,25 +523,70 @@
             }
 
             /**
-             * Function to populate the runs in the sidebar.
+             * Function to populate the projects dropdowns.
              */
-            function populateRunsSidebar(runs_data) {
-                const sidebar = document.getElementById('sidebar');
-                if (!sidebar) {
-                    console.error('Sidebar container not found in the DOM.');
+            function populateProjectsDropdown() {
+                const projectSelectSidebar = document.getElementById('project-select-sidebar');
+                const projectSelectHeader = document.getElementById('project-select-header');
+                if (!projectSelectSidebar || !projectSelectHeader) {
+                    console.error('Project select elements not found in the DOM.');
                     return;
                 }
-                // Clear the sidebar
-                sidebar.innerHTML = '';
 
-                // Create a list or menu
-                const runsList = document.createElement('ul');
-                runsList.style.listStyleType = 'none';
-                runsList.style.padding = '0';
+                // Clear existing options
+                projectSelectSidebar.innerHTML = '';
+                projectSelectHeader.innerHTML = '';
 
-                runs_data.forEach(run => {
+                projects.forEach((project, index) => {
+                    const optionSidebar = document.createElement('option');
+                    optionSidebar.value = project.id;
+                    optionSidebar.textContent = project.name;
+                    projectSelectSidebar.appendChild(optionSidebar);
+
+                    const optionHeader = document.createElement('option');
+                    optionHeader.value = project.id;
+                    optionHeader.textContent = project.name;
+                    projectSelectHeader.appendChild(optionHeader);
+                });
+
+                if (projects.length > 0) {
+                    // selectedProjectId = projects[0].id;
+                    // projectSelectSidebar.value = selectedProjectId;
+                    // projectSelectHeader.value = selectedProjectId;
+
+                    // Select the most recently updated project
+                    const mostRecentProject = projects.reduce((prev, current) => {
+                        return (prev.updated_at > current.updated_at) ? prev : current;
+                    });
+                    selectedProjectId = mostRecentProject.id;
+                    projectSelectSidebar.value = selectedProjectId;
+                }
+            }
+
+            /**
+             * Function to populate the runs in the sidebar.
+             */
+            function populateRunsSidebar() {
+                const runsList = document.querySelector('#runs-list ul');
+                if (!runsList) {
+                    console.error('Runs list element not found in the DOM.');
+                    return;
+                }
+
+                // Clear the runs list
+                runsList.innerHTML = '';
+
+                if (runs.length === 0) {
+                    runsList.innerHTML = '<li>No runs available for this project.</li>';
+                    return;
+                }
+
+                if (runs.length > 0) {
+                    latestRunId = runs[0].id;
+                }
+
+                runs.forEach((run, index) => {
                     const runItem = document.createElement('li');
-                    runItem.style.marginBottom = '10px';
 
                     const runLink = document.createElement('a');
                     runLink.href = '#';
@@ -461,90 +595,153 @@
 
                     // Highlight the selected run
                     if (run.id === selectedRunId) {
-                        runLink.style.fontWeight = 'bold';
+                        runLink.classList.add('selected');
                     }
 
                     // Add click event
                     runLink.addEventListener('click', function(event) {
                         event.preventDefault();
+                        // Avoid reloading the same run
+                        if (run.id === selectedRunId) return;
+
+                        // Update selected run
+                        selectedRunId = run.id;
+                        // Update the selected link's appearance
+                        const allRunLinks = runsList.querySelectorAll('a');
+                        allRunLinks.forEach(link => link.classList.remove('selected'));
+                        runLink.classList.add('selected');
+
                         // Clear existing charts and categories
                         clearCharts();
                         // Fetch data for the selected run
-                        fetchData(run.id);
+                        fetchRunData(selectedProjectId, selectedRunId);
                     });
 
                     runItem.appendChild(runLink);
                     runsList.appendChild(runItem);
                 });
 
-                sidebar.appendChild(runsList);
+                // Select the latest run by default if not already selected
+                if (!selectedRunId && runs.length > 0) {
+                    selectedRunId = runs[0].id;
+                    const firstRunLink = runsList.querySelector('a');
+                    if (firstRunLink) {
+                        firstRunLink.classList.add('selected');
+                    }
+                    fetchRunData(selectedProjectId, selectedRunId);
+                }
             }
 
             /**
-             * Fetch initial data and populate charts.
+             * Function to handle project selection change.
+             * @param {string} projectId - The ID of the selected project.
              */
-            async function fetchData(runId) {
+            async function onProjectChange(projectId) {
+                selectedProjectId = parseInt(projectId);
+                selectedRunId = null;
+                runs = [];
+                clearCharts();
+
                 try {
-                    if (project_data == null) {
-                        // get the project info
-                        let project_response = await fetch('/info');
-                        if (!project_response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        project_data = await project_response.json();
-                        if (Array.isArray(project_data)) {
-                            project_data = project_data[0];
-                        }
-                        console.log('Project data fetched:', project_data);
-                        // if project_data is undefined, then set to null and return
-                        if (project_data == undefined) {
-                            project_data = null;
-                            return;
-                        }
-
-                        // update the dashboard title
-                        const dashboardTitle = document.getElementById('dashboard-title');
-                        console.log(project_data.name);
-                        dashboardTitle.textContent = "Project: " + project_data.name;
+                    // Fetch runs for the selected project
+                    const runsResponse = await fetch(`/projects/${projectId}/runs`);
+                    if (!runsResponse.ok) {
+                        throw new Error('Network response was not ok while fetching runs.');
                     }
+                    runs = await runsResponse.json();
+                    console.log('Runs data fetched:', runs);
 
-                    if (project_runs == null) {
-                        // get the project runs
-                        project_runs = await fetch('/runs');
-                        if (!project_runs.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        project_runs = await project_runs.json();
-                        console.log('Runs data fetched:', project_runs);
+                    // Populate the runs sidebar
+                    populateRunsSidebar();
+                } catch (error) {
+                    console.error('Error fetching runs:', error);
+                }
+            }
+
+            function applyLogEntry(logEntry) {
+                const category = logEntry.category;
+                const name = logEntry.name;
+
+                let data = logEntry?.data || logEntry;
+                logEntry.value = data?.value_double ?? data?.value_bool ?? data?.value_json ?? data?.value_string ?? data?.value ?? logEntry.value;
+
+                // If value is a string, try to parse it as JSON
+                if (typeof logEntry.value === 'string') {
+                    try {
+                        logEntry.value = JSON.parse(logEntry.value);
+                    } catch (error) {
+                        console.error('Error parsing log entry value:', error);
                     }
+                }
 
-                    if (project_runs.length > 0) {
-                        latestRunId = project_runs[0].id;
+                if (!category || !name) {
+                    console.warn('Log entry missing category or name:', logEntry);
+                    return;
+                }
+
+                // Determine chart type based on value
+                let chartType = 'line';
+                if (typeof logEntry.value === 'object' && !Array.isArray(logEntry.value)) {
+                    console.log("Object value detected, using bar chart for histogram.");
+                    chartType = 'bar'; // Use bar chart for histogram
+                }
+
+                // Create the chart if it doesn't exist
+                if (!categories[category]?.charts[name]) {
+                    console.log('Creating chart:', category, name, chartType, logEntry.value);
+                    let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
+                    createChartForName(category, name, value_count, chartType);
+                    console.log(categories[category]?.charts[name].chart.config.type);
+                }
+
+                // Update chart data
+                const chartInfo = categories[category]?.charts[name];
+                console.log('Updating chart:', category, name, chartInfo);
+                if (!chartInfo) {
+                    console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
+                    return;
+                }
+
+                if (chartInfo.chart.config.type === 'bar') {
+                    // Histogram data: overwrite existing data
+                    const labels = Object.keys(logEntry.value);
+                    const values = Object.values(logEntry.value);
+                    console.log('Updating bar chart data:', labels, values);
+                    chartInfo.data.labels = labels;
+                    chartInfo.data.datasets[0].data = values;
+                } else {
+                    chartInfo.data.labels.push(logEntry.step);
+
+                    if (Array.isArray(logEntry.value)) {
+                        logEntry.value.forEach((value, i) => {
+                            if (chartInfo.data.datasets[i]) {
+                                chartInfo.data.datasets[i].data.push(value);
+                            }
+                        });
                     } else {
-                        console.error('No runs available.');
-                        // Handle the case when there are no runs, e.g., display a message or retry fetching
-                        return;
+                        chartInfo.data.datasets[0].data.push(logEntry.value);
                     }
-                    // If runId is not provided, use the latest run
-                    if (!runId) {
-                        runId = latestRunId;
-                    }
+                }
 
-                    // Update global variables
-                    selectedRunId = runId;
+                chartInfo.chart.update();
+            }
 
-                    // Populate the runs in the sidebar
-                    populateRunsSidebar(project_runs, runId);
-
-                    const response = await fetch('/run/' + runId);
+            /**
+             * Fetch run data and populate charts.
+             * @param {string} projectId - The ID of the project.
+             * @param {string} runId - The ID of the run.
+             */
+            async function fetchRunData(projectId, runId) {
+                try {
+                    const response = await fetch(`/projects/${projectId}/runs/${runId}`);
                     if (!response.ok) {
-                        throw new Error('Network response was not ok');
+                        throw new Error('Network response was not ok while fetching run data.');
                     }
                     const data = await response.json();
-                    console.log('Initial data fetched:', data);
+                    console.log('Run data fetched:', data);
 
                     // if there's no data then update the ui to show that there's no data and return
-                    if (data.length == 0) {
+                    if (data.length === 0) {
                         const mainChartsContainer = document.getElementById('charts-container');
                         if (mainChartsContainer) {
                             mainChartsContainer.innerHTML = '<p>No data available for this run.</p>';
@@ -553,56 +750,51 @@
                     }
 
                     // Process each log entry
-                    data.forEach(entry => {
-                        const category = entry.category;
-                        const name = entry.name;
-
-                        // if value is a string then try to convert it to a json object
-                        if (typeof entry.value === 'string') {
-                            try {
-                                entry.value = JSON.parse(entry.value);
-                            } catch (error) {
-                                console.error('Error parsing log entry value:', error);
-                            }
-                        }
-
-                        if (!category || !name) {
-                            console.warn('Log entry missing category or name:', entry);
-                            return;
-                        }
-
-                        // Create the chart if it doesn't exist
-                        if (!categories[category]?.charts[name]) {
-                            // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                            let value_count = Array.isArray(entry.value) ? entry.value.length : 1;
-                            createChartForName(category, name, value_count);
-                        }
-
-                        // Update chart data
-                        const chartInfo = categories[category]?.charts[name];
-                        if (!chartInfo) {
-                            console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
-                            return;
-                        }
-
-                        chartInfo.data.labels.push(entry.step);
-                        // if value is an array then add each value to the chart
-                        if (Array.isArray(entry.value)) {
-                            let i = 0;
-                            entry.value.forEach(value => {
-                                chartInfo.data.datasets[i].data.push(value);
-                                i += 1;
-                            });
-                        } else {
-                            chartInfo.data.datasets[0].data.push(entry.value);
-                        }
-                        chartInfo.chart.update();
+                    data.forEach(logEntry => {
+                        logEntry.data = JSON.parse(logEntry.data);
+                        applyLogEntry(logEntry);
                     });
 
                     // Set initial load complete flag
                     isInitialLoadComplete = true;
                 } catch (error) {
-                    console.error('Error fetching data:', error);
+                    console.error('Error fetching run data:', error);
+                }
+            }
+
+            /**
+             * Fetch initial projects and set up the dashboard.
+             */
+            async function initializeDashboard() {
+                try {
+                    // Fetch projects
+                    const projectsResponse = await fetch('/projects');
+                    if (!projectsResponse.ok) {
+                        throw new Error('Network response was not ok while fetching projects.');
+                    }
+                    projects = await projectsResponse.json();
+                    console.log('Projects fetched:', projects);
+
+                    if (projects.length === 0) {
+                        const dashboardTitle = document.getElementById('dashboard-title');
+                        dashboardTitle.textContent = "No projects available.";
+                        const sidebar = document.getElementById('sidebar');
+                        sidebar.innerHTML = '<p>No projects to display.</p>';
+                        return;
+                    }
+
+                    // Populate the projects dropdowns
+                    populateProjectsDropdown();
+
+                    // Update the dashboard title
+                    const dashboardTitle = document.getElementById('dashboard-title');
+                    const selectedProject = projects.find(p => p.id === selectedProjectId);
+                    dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+                    // Fetch runs for the selected project
+                    await onProjectChange(selectedProjectId);
+                } catch (error) {
+                    console.error('Error initializing dashboard:', error);
                 }
             }
 
@@ -614,57 +806,16 @@
                 const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
                 ws.onmessage = function(event) {
-                    // If the user is not viewing the latest run, ignore updates
-                    if (selectedRunId !== latestRunId || !isInitialLoadComplete) {
-                        return;
-                    }
-
-                    const logEntry = JSON.parse(event.data);
-                    // console.log('WebSocket message received:', logEntry);
-
-                    const category = logEntry.category;
-                    const name = logEntry.name;
-
-                    // if value is a string then try to convert it to a json object
-                    if (typeof logEntry.value === 'string') {
-                        try {
-                            logEntry.value = JSON.parse(logEntry.value);
-                        } catch (error) {
-                            console.error('Error parsing log entry value:', error);
+                    const msg = JSON.parse(event.data);
+                    const command = msg.command;
+                    if (command === 'LOG') {
+                        // Only update if the user is viewing the latest run of the selected project
+                        // TODO: we should subscribe to the selected project and run only
+                        if (selectedRunId !== msg.data.run_id || selectedProjectId !== msg.data.project_id || !isInitialLoadComplete) {
+                            return;
                         }
+                        applyLogEntry(msg.data);
                     }
-
-                    if (!category || !name) {
-                        console.warn('WebSocket log entry missing category or name:', logEntry);
-                        return;
-                    }
-
-                    // Create the chart if it doesn't exist
-                    if (!categories[category]?.charts[name]) {
-                        // console.log(`Chart "${name}" under category "${category}" not found. Creating new chart.`);
-                        // is the entry a vector?
-                        let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
-                        createChartForName(category, name, value_count);
-                    }
-
-                    // Update chart data
-                    const chartInfo = categories[category]?.charts[name];
-                    if (!chartInfo) {
-                        console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
-                        return;
-                    }
-
-                    chartInfo.data.labels.push(logEntry.step);
-                    if (Array.isArray(logEntry.value)) {
-                        let i = 0;
-                        logEntry.value.forEach(value => {
-                            chartInfo.data.datasets[i].data.push(value);
-                            i += 1;
-                        });
-                    } else {
-                        chartInfo.data.datasets[0].data.push(logEntry.value);
-                    }
-                    chartInfo.chart.update();
                 };
 
                 ws.onclose = function(event) {
@@ -682,18 +833,44 @@
              * Utility function to generate a random color for chart lines.
              * Ensures that each chart has a distinct color.
              */
-            function getRandomColor() {
-                const letters = '0123456789ABCDEF';
-                let color = '#';
-                for (let i = 0; i < 6; i++) {
-                    color += letters[Math.floor(Math.random() * 16)];
-                }
-                return color;
+             function getRandomColor() {
+                // const letters = '01234567'; // Limit to lower half for darker shades
+                // let color = '#';
+                // for (let i = 0; i < 6; i++) {
+                //     color += letters[Math.floor(Math.random() * letters.length)];
+                // }
+                // return color;
+
+                // return reddish color
+                return 'rgb(0, 99, 132)';
             }
 
             // Initialize the dashboard
-            fetchData();
+            initializeDashboard();
             setupWebSocket();
+
+            // Add event listeners for project selection on both dropdowns
+            const projectSelectSidebar = document.getElementById('project-select-sidebar');
+            const projectSelectHeader = document.getElementById('project-select-header');
+
+            function handleProjectSelection(event) {
+                const selectedProjectId = event.target.value;
+
+                // Update both dropdowns to reflect the selection
+                projectSelectSidebar.value = selectedProjectId;
+                projectSelectHeader.value = selectedProjectId;
+
+                // Update the dashboard title
+                const selectedProject = projects.find(p => p.id === selectedProjectId);
+                const dashboardTitle = document.getElementById('dashboard-title');
+                dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+                // Handle project change
+                onProjectChange(selectedProjectId);
+            }
+
+            projectSelectSidebar.addEventListener('change', handleProjectSelection);
+            projectSelectHeader.addEventListener('change', handleProjectSelection);
         });
     </script>
 </body>
