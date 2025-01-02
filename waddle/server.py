@@ -408,39 +408,112 @@ async def get_project_runs(project_id: int, convert_timestamps: Optional[bool] =
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/projects/{project_id}/runs/{run_id}")
-async def get_run(project_id: int, run_id: int, history: Optional[int] = 10, from_step: Optional[int] = None, convert_timestamps: Optional[bool] = True):
+async def get_run(
+    project_id: int,
+    run_id: int,
+    start_datetime: Optional[str] = None,
+    end_datetime: Optional[str] = None,
+    history: Optional[int] = 10,
+    from_step: Optional[int] = None,
+    convert_timestamps: Optional[bool] = True
+):
+    """
+    Returns log data for the specified run.
+
+    Logic priority:
+      1) If start_date or end_date is provided, filter by timestamp >= start_date, <= end_date.
+      2) Else if from_step is provided, filter logs by step >= from_step.
+      3) Else fallback to limiting logs by `history` (the most recent N entries).
+    """
+
     if not waddle_server_instance:
         raise HTTPException(status_code=500, detail="Server not initialized")
     try:
-        # first get the list of names
-        df = waddle_server_instance.con.execute("SELECT DISTINCT name FROM logs WHERE run_id = ?", (run_id,)).fetchdf()
-        # for each name then get the history of that name and collect it in a list
-        data = []
-        for name in df['name']:
-            if from_step:
-                df = waddle_server_instance.con.execute("""
-                    SELECT * FROM logs
-                    WHERE run_id = ? AND name = ? AND step >= ?
-                    ORDER BY step DESC
-                """, (run_id, name, from_step)).fetchdf()
-            else:
-                df = waddle_server_instance.con.execute("""
-                    SELECT * FROM logs
-                    WHERE run_id = ? AND name = ?
-                    ORDER BY step DESC LIMIT ?
-                """, (run_id, name, history)).fetchdf()
+        # 0) First get the distinct chart names for this run.
+        name_df = waddle_server_instance.con.execute(
+            "SELECT DISTINCT name FROM logs WHERE run_id = ?",
+            (run_id,)
+        ).fetchdf()
 
-            # Convert timestamps to ISO format
+        if name_df.empty:
+            return []  # no logs for this run
+
+        # Prepare date range filters if provided
+        date_filters = []
+        date_params = []
+
+        # We'll interpret start_date and end_date as inclusive bounds.
+        # Adjust as needed, e.g. end_date + " 23:59:59" for day-based inclusivity.
+        if start_datetime:
+            # For safety, parse and re-format in a consistent way:
+            try:
+                start_dt = datetime.strptime(start_datetime, "%Y-%m-%d %H:%M:%S")  # e.g. "2021-01-01 00:00:00"
+                start_str = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid start_date format (expected YYYY-MM-DD).")
+            date_filters.append("timestamp >= ?")
+            date_params.append(start_str)
+
+        if end_datetime:
+            try:
+                end_dt = datetime.strptime(end_datetime, "%Y-%m-%d")
+                end_str = end_dt.strftime("%Y-%m-%d 23:59:59")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid end_date format (expected YYYY-MM-DD).")
+            date_filters.append("timestamp <= ?")
+            date_params.append(end_str)
+
+        # We'll accumulate all log rows in a list of dicts
+        data = []
+
+        # 1) Loop over each chart name to get logs
+        for name in name_df['name']:
+            # Build base query
+            base_query = "SELECT * FROM logs WHERE run_id = ? AND name = ?"
+            query_params = [run_id, name]
+
+            # 1a) If date filters are present, that takes priority
+            if date_filters:
+                # e.g.: SELECT * FROM logs WHERE run_id=? AND name=? AND timestamp>=? AND timestamp<=? ORDER BY step DESC
+                for f in date_filters:
+                    base_query += f" AND {f}"
+                query_params.extend(date_params)
+                base_query += " ORDER BY step DESC"
+
+            # 1b) Otherwise, check if from_step is provided
+            elif from_step is not None:
+                # e.g.: SELECT * FROM logs WHERE run_id=? AND name=? AND step>=? ORDER BY step DESC
+                base_query += " AND step >= ? ORDER BY step DESC"
+                query_params.append(from_step)
+
+            # 1c) Otherwise fallback to the `history` limit
+            else:
+                # e.g.: SELECT * FROM logs WHERE run_id=? AND name=? ORDER BY step DESC LIMIT ?
+                base_query += " ORDER BY step DESC LIMIT ?"
+                query_params.append(history)
+
+            # Execute query
+            df = waddle_server_instance.con.execute(base_query, query_params).fetchdf()
+
+            # 2) Convert timestamps to ISO format if requested
             if convert_timestamps and 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.strftime('%Y-%m-%dT%H:%M:%S')
-            df = df.sort_values(by='step')
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce') \
+                                     .dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+            # 3) Sort logs in ascending order by step before returning (so the chart can process them sequentially)
+            if not df.empty and 'step' in df.columns:
+                df = df.sort_values(by='step', ascending=True)
+
+            # 4) Merge into final result
             data.extend(df.to_dict(orient='records'))
+
         logger.info(f"Returning {len(data)} records for run {run_id}")
         return data
+
     except Exception as e:
         import traceback
-        print(e)
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 

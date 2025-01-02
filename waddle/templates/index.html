@@ -5,7 +5,7 @@
     <title>Waddle Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* Reset some default styles for consistency across browsers */
+        /* --- (Existing CSS styles unchanged) --- */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -14,16 +14,15 @@
 
         body {
             font-family: Arial, sans-serif;
-            background-color: #121212; /* Changed to dark background */
-            color: #e0e0e0; /* Light text for readability */
+            background-color: #121212;
+            color: #e0e0e0;
         }
 
-        /* Header styles */
         #header {
             display: flex;
             align-items: center;
             padding: 20px;
-            background-color: #1e1e1e; /* Darker header background */
+            background-color: #1e1e1e;
         }
 
         #project-logo {
@@ -33,51 +32,46 @@
 
         #dashboard-title {
             font-size: 2em;
-            color: #ffffff; /* White title for contrast */
+            color: #ffffff;
         }
 
-        /* Main container splits the page into sidebar and content */
         #main-container {
             display: flex;
         }
 
-        /* Sidebar styles */
         #sidebar {
             min-width: 200px;
-            background-color: #1e1e1e; /* Dark sidebar background */
+            background-color: #1e1e1e;
             padding: 20px;
             overflow-y: auto;
-            border-right: 1px solid #333; /* Subtle border */
+            border-right: 1px solid #333;
         }
 
-        /* Project header styles */
         #project-header {
-            display: none; /* Hide by default */
+            display: none;
             padding: 20px;
-            background-color: #1e1e1e; /* Darker project header */
-            border-bottom: 1px solid #333; /* Subtle border */
+            background-color: #1e1e1e;
+            border-bottom: 1px solid #333;
         }
 
-        /* Project selection dropdown styles */
         #project-select-sidebar,
         #project-select-header {
             width: 100%;
             padding: 8px;
             margin-bottom: 20px;
             border-radius: 4px;
-            border: 1px solid #555; /* Darker border */
-            background-color: #2c2c2c; /* Dark dropdown background */
-            color: #e0e0e0; /* Light text */
-            font-size: 14px; /* Default font size */
+            border: 1px solid #555;
+            background-color: #2c2c2c;
+            color: #e0e0e0;
+            font-size: 14px;
         }
 
         #project-select-sidebar option,
         #project-select-header option {
-            background-color: #2c2c2c; /* Dark options background */
-            color: #e0e0e0; /* Light option text */
+            background-color: #2c2c2c;
+            color: #e0e0e0;
         }
 
-        /* Runs list styles */
         #runs-list ul {
             list-style-type: none;
             padding: 0;
@@ -89,119 +83,175 @@
 
         #runs-list a {
             text-decoration: none;
-            color: #e0e0e0; /* Light text */
+            color: #e0e0e0;
             display: block;
             padding: 8px;
             border-radius: 4px;
-            background-color: #2c2c2c; /* Dark link background */
+            background-color: #2c2c2c;
             transition: background-color 0.3s, color 0.3s;
         }
 
         #runs-list a:hover {
-            background-color: #444; /* Slightly lighter on hover */
-            color: #ffffff; /* White text on hover */
+            background-color: #444;
+            color: #ffffff;
             text-decoration: none;
         }
 
         #runs-list a.selected {
             font-weight: bold;
-            background-color: #555; /* Highlight selected run */
-            color: #ffffff; /* White text */
+            background-color: #555;
+            color: #ffffff;
         }
 
-        /* Content area styles */
         #content {
             flex-grow: 1;
             padding: 20px;
-            background-color: #121212; /* Dark content background */
+            background-color: #121212;
         }
 
-        /* Main container for all charts */
         #charts-container {
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
 
-        /* Style for each category's <details> element */
         details.category-section {
-            border: 1px solid #333; /* Darker border */
+            border: 1px solid #333;
             border-radius: 8px;
-            background-color: #1e1e1e; /* Dark background */
+            background-color: #1e1e1e;
             overflow: hidden;
             transition: box-shadow 0.3s ease;
         }
-
         details.category-section:hover {
-            box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1); /* Subtle light shadow */
+            box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1);
         }
-
-        /* Style for the summary (header) of each category */
         details.category-section summary {
             font-size: 1.5em;
             font-weight: bold;
             cursor: pointer;
             padding: 15px;
-            background-color: #2c2c2c; /* Darker summary background */
+            background-color: #2c2c2c;
             position: relative;
-            list-style: none; /* Remove default disclosure triangle */
+            list-style: none;
             user-select: none;
-            color: #ffffff; /* White text */
+            color: #ffffff;
         }
-
-        /* Custom disclosure triangle */
         details.category-section summary::before {
             content: "▶";
             display: inline-block;
             margin-right: 10px;
             transition: transform 0.3s ease;
             font-size: 1em;
-            color: #e0e0e0; /* Light triangle */
+            color: #e0e0e0;
         }
-
         details.category-section[open] summary::before {
             transform: rotate(90deg);
         }
 
-        /* Container for all charts within a category */
         .charts-wrapper {
             display: flex;
             flex-wrap: wrap;
             gap: 20px;
             padding: 15px;
-            background-color: #1e1e1e; /* Darker charts wrapper */
+            background-color: #1e1e1e;
         }
 
-        /* Individual chart container */
         .chart-container {
-            flex: 1 1 45%; /* Grow to fill space, base width 45% */
+            flex: 1 1 45%;
             min-width: 300px;
             height: 300px;
             position: relative;
-            background-color: #2c2c2c; /* Dark chart background */
-            border: 1px solid #444; /* Darker border */
+            background-color: #2c2c2c;
+            border: 1px solid #444;
             border-radius: 6px;
             padding: 10px;
-            box-shadow: 0 2px 4px rgba(255,255,255,0.05); /* Subtle light shadow */
+            box-shadow: 0 2px 4px rgba(255,255,255,0.05);
             display: flex;
             flex-direction: column;
+            cursor: pointer; /* We'll use this to let users click to expand */
         }
 
-        /* Chart title */
         .chart-title {
             text-align: center;
             font-size: 1.2em;
             margin-bottom: 10px;
             flex-shrink: 0;
-            color: #ffffff; /* White title */
+            color: #ffffff;
         }
 
-        /* Ensure the canvas fills the container */
         .chart-container canvas {
             flex-grow: 1;
             width: 100% !important;
             height: 100% !important;
-            background-color: #2c2c2c !important; /* Match chart background */
+            background-color: #2c2c2c !important;
+        }
+
+        /* Additional UI for date range selection */
+        #date-range-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #date-range-container label {
+            font-weight: bold;
+            color: #ffffff;
+        }
+        #date-range-container input {
+            background-color: #2c2c2c;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        #date-range-container button {
+            background-color: #444;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #date-range-container button:hover {
+            background-color: #666;
+        }
+
+        /* Modal for enlarged chart */
+        #modal-overlay {
+            position: fixed;
+            display: none; /* hidden by default */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+        #modal-content {
+            background-color: #1e1e1e;
+            position: relative;
+            padding: 20px;
+            border-radius: 6px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        #modal-close {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        #modal-chart {
+            width: 800px !important;
+            height: 600px !important;
+            background-color: #2c2c2c !important;
         }
 
         /* Responsive Adjustments */
@@ -209,30 +259,23 @@
             #main-container {
                 flex-direction: column;
             }
-
             #sidebar {
-                display: none; /* Hide the sidebar on small screens */
+                display: none;
             }
-
             #project-header {
-                display: block; /* Show the project header on small screens */
+                display: block;
             }
-
             #content {
                 width: 100%;
             }
-
             .charts-wrapper {
                 flex-direction: column;
             }
-
             .chart-container {
                 flex: 1 1 100%;
                 min-width: unset;
                 height: 300px;
             }
-
-            /* Increase the font size of the project chooser on mobile */
             #project-select-header {
                 font-size: 16px;
             }
@@ -242,22 +285,17 @@
             #dashboard-title {
                 font-size: 1.5em;
             }
-
             details.category-section summary {
                 font-size: 1.2em;
                 padding: 12px;
             }
-
             .chart-container {
                 height: 250px;
             }
-
             .chart-title {
                 font-size: 1em;
                 margin-bottom: 8px;
             }
-
-            /* Further increase the font size on smaller screens */
             #project-select-header {
                 font-size: 18px;
             }
@@ -275,7 +313,6 @@
             <select id="project-select-sidebar">
                 <option value="" disabled>Loading projects...</option>
             </select>
-            <!-- Runs will be dynamically inserted here -->
             <div id="runs-list">
                 <ul></ul>
             </div>
@@ -287,11 +324,31 @@
             </select>
         </div>
         <div id="content">
+            <!-- 1) Date Range Selector -->
+            <div id="date-range-container">
+                <label for="start-date-input">Start Date:</label>
+                <input type="date" id="start-date-input" />
+
+                <label for="end-date-input">End Date:</label>
+                <input type="date" id="end-date-input" />
+
+                <button id="update-date-range">Update Date Range</button>
+            </div>
+
             <div id="charts-container">
                 <!-- Categories and their charts will be dynamically inserted here -->
             </div>
         </div>
     </div>
+
+    <!-- 2) Modal for enlarged chart -->
+    <div id="modal-overlay">
+        <div id="modal-content">
+            <span id="modal-close">&times;</span>
+            <canvas id="modal-chart"></canvas>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         /**
@@ -309,569 +366,627 @@
             }
         }
 
+        // Global object to hold chart instances by category
+        const categories = {};
+
+        // Keep track of projects, runs, and selected IDs
+        let projects = [];
+        let selectedProjectId = null;
+        let runs = [];
+        let selectedRunId = null;
+        let latestRunId = null;
+        let isInitialLoadComplete = false;
+
+        // For the enlarged chart
+        let modalChartInstance = null;
+
         document.addEventListener('DOMContentLoaded', function() {
-            // Object to hold chart instances organized by category
-            const categories = {};
-
-            // Keep track of projects and runs
-            let projects = [];
-            let selectedProjectId = null;
-            let runs = [];
-            let selectedRunId = null;
-            let latestRunId = null;
-            let isInitialLoadComplete = false;
-
-            /**
-             * Function to create a new chart within a specified category.
-             * @param {string} category - The name of the category.
-             * @param {string} name - The name of the chart.
-             */
-             function createChartForName(category, name, value_count, chartType = 'line') {
-                // Ensure the category section exists
-                let categorySection = categories[category]?.section;
-                if (!categorySection) {
-                    // Create a <details> element for the category
-                    categorySection = document.createElement('details');
-                    categorySection.className = 'category-section';
-
-                    // Create a <summary> element for the category name
-                    const summary = document.createElement('summary');
-                    summary.textContent = category;
-                    categorySection.appendChild(summary);
-
-                    // Create a container for all charts under this category
-                    const chartsContainer = document.createElement('div');
-                    chartsContainer.className = 'charts-wrapper';
-                    categorySection.appendChild(chartsContainer);
-
-                    // Append the category section to the main charts container
-                    const mainChartsContainer = document.getElementById('charts-container');
-                    if (!mainChartsContainer) {
-                        console.error('Main charts container not found in the DOM.');
-                        return;
-                    }
-                    mainChartsContainer.appendChild(categorySection);
-
-                    // Initialize the category in the categories object
-                    categories[category] = {
-                        section: categorySection,
-                        charts: {}
-                    };
-                }
-
-                // Check if the chart already exists within the category
-                if (categories[category].charts[name]) {
-                    console.warn(`Chart "${name}" already exists under category "${category}".`);
-                    return;
-                }
-
-                // Create a container for the individual chart
-                const chartContainer = document.createElement('div');
-                chartContainer.className = 'chart-container';
-
-                // Add a title for the chart
-                const chartTitle = document.createElement('div');
-                chartTitle.className = 'chart-title';
-                chartTitle.textContent = name;
-                chartContainer.appendChild(chartTitle);
-
-                // Create a canvas element for the chart
-                const canvas = document.createElement('canvas');
-                chartContainer.appendChild(canvas);
-
-                // Append the chart container to the category's charts wrapper
-                const chartsWrapper = categorySection.querySelector('.charts-wrapper');
-
-                // Extract the number from the new chart's name
-                const newChartNumber = extractNumberFromChartName(name);
-
-                // Find the correct position to insert the new chart container
-                let inserted = false;
-                for (let i = 0; i < chartsWrapper.children.length; i++) {
-                    const existingChartContainer = chartsWrapper.children[i];
-                    const existingChartTitle = existingChartContainer.querySelector('.chart-title').textContent;
-                    const existingChartNumber = extractNumberFromChartName(existingChartTitle);
-
-                    if (newChartNumber !== null && existingChartNumber !== null) {
-                        // Compare the extracted numbers
-                        if (newChartNumber < existingChartNumber) {
-                            chartsWrapper.insertBefore(chartContainer, existingChartContainer);
-                            inserted = true;
-                            break;
-                        }
-                    } else {
-                        // Fallback to string comparison if numbers can't be extracted
-                        if (existingChartTitle.localeCompare(name) > 0) {
-                            chartsWrapper.insertBefore(chartContainer, existingChartContainer);
-                            inserted = true;
-                            break;
-                        }
-                    }
-                }
-                if (!inserted) {
-                    chartsWrapper.appendChild(chartContainer);
-                }
-
-                // Initialize chart data
-                const chartData = {
-                    labels: [],
-                    datasets: []
-                };
-
-                if (chartType === 'bar') {
-                    // For histograms, we usually have one dataset
-                    chartData.datasets.push({
-                        label: name,
-                        data: [],
-                        backgroundColor: getRandomColor(),
-                        borderColor: getRandomColor(),
-                        borderWidth: 1
-                    });
-                } else {
-                    // Line chart data initialization
-                    for (let i = 0; i < value_count; i++) {
-                        chartData.datasets.push({
-                            label: value_count > 1 ? name + ' ' + i : name,
-                            data: [],
-                            borderColor: getRandomColor(),
-                            backgroundColor: 'rgba(0, 0, 0, 0)', // Transparent background
-                            tension: 0
-                        });
-                    }
-                }
-
-                // Chart configuration
-                const config = {
-                    type: chartType,
-                    data: chartData,
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false,
-                            },
-                            title: {
-                                display: false,
-                                text: name
-                            }
-                        },
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: chartType === 'bar' ? 'Bins' : 'Step'
-                                },
-                                ticks: {
-                                    autoSkip: true // Ensures all labels are displayed
-                                },
-                                grid: {
-                                    display: true,
-                                    color: '#444' // Dark grid lines
-                                }
-                            },
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: chartType === 'bar' ? 'Frequency' : 'Value'
-                                },
-                                grid: {
-                                    display: true,
-                                    color: '#444' // Dark grid lines
-                                }
-                            }
-                        }
-                    }
-                };
-
-                // Create the chart
-                try {
-                    const chart = new Chart(canvas, config);
-                    // Store the chart and its data under the category
-                    categories[category].charts[name] = {
-                        chart: chart,
-                        data: chartData
-                    };
-                } catch (error) {
-                    console.error(`Error creating chart "${name}" under category "${category}":`, error);
-                }
-            }
-
-            /**
-             * Function to clear all existing charts and categories.
-             */
-            function clearCharts() {
-                // Destroy all existing charts
-                for (const category in categories) {
-                    const chartsInCategory = categories[category].charts;
-                    for (const chartName in chartsInCategory) {
-                        chartsInCategory[chartName].chart.destroy();
-                    }
-                }
-
-                // Clear the categories object
-                for (let category in categories) {
-                    delete categories[category];
-                }
-
-                // Clear the charts container in the DOM
-                const mainChartsContainer = document.getElementById('charts-container');
-                if (mainChartsContainer) {
-                    mainChartsContainer.innerHTML = '';
-                }
-            }
-
-            /**
-             * Function to populate the projects dropdowns.
-             */
-            function populateProjectsDropdown() {
-                const projectSelectSidebar = document.getElementById('project-select-sidebar');
-                const projectSelectHeader = document.getElementById('project-select-header');
-                if (!projectSelectSidebar || !projectSelectHeader) {
-                    console.error('Project select elements not found in the DOM.');
-                    return;
-                }
-
-                // Clear existing options
-                projectSelectSidebar.innerHTML = '';
-                projectSelectHeader.innerHTML = '';
-
-                projects.forEach((project, index) => {
-                    const optionSidebar = document.createElement('option');
-                    optionSidebar.value = project.id;
-                    optionSidebar.textContent = project.name;
-                    projectSelectSidebar.appendChild(optionSidebar);
-
-                    const optionHeader = document.createElement('option');
-                    optionHeader.value = project.id;
-                    optionHeader.textContent = project.name;
-                    projectSelectHeader.appendChild(optionHeader);
-                });
-
-                if (projects.length > 0) {
-                    // selectedProjectId = projects[0].id;
-                    // projectSelectSidebar.value = selectedProjectId;
-                    // projectSelectHeader.value = selectedProjectId;
-
-                    // Select the most recently updated project
-                    const mostRecentProject = projects.reduce((prev, current) => {
-                        return (prev.updated_at > current.updated_at) ? prev : current;
-                    });
-                    selectedProjectId = mostRecentProject.id;
-                    projectSelectSidebar.value = selectedProjectId;
-                }
-            }
-
-            /**
-             * Function to populate the runs in the sidebar.
-             */
-            function populateRunsSidebar() {
-                const runsList = document.querySelector('#runs-list ul');
-                if (!runsList) {
-                    console.error('Runs list element not found in the DOM.');
-                    return;
-                }
-
-                // Clear the runs list
-                runsList.innerHTML = '';
-
-                if (runs.length === 0) {
-                    runsList.innerHTML = '<li>No runs available for this project.</li>';
-                    return;
-                }
-
-                if (runs.length > 0) {
-                    latestRunId = runs[0].id;
-                }
-
-                runs.forEach((run, index) => {
-                    const runItem = document.createElement('li');
-
-                    const runLink = document.createElement('a');
-                    runLink.href = '#';
-                    runLink.textContent = 'Run: ' + run.start_time;
-                    runLink.dataset.runId = run.id;
-
-                    // Highlight the selected run
-                    if (run.id === selectedRunId) {
-                        runLink.classList.add('selected');
-                    }
-
-                    // Add click event
-                    runLink.addEventListener('click', function(event) {
-                        event.preventDefault();
-                        // Avoid reloading the same run
-                        if (run.id === selectedRunId) return;
-
-                        // Update selected run
-                        selectedRunId = run.id;
-                        // Update the selected link's appearance
-                        const allRunLinks = runsList.querySelectorAll('a');
-                        allRunLinks.forEach(link => link.classList.remove('selected'));
-                        runLink.classList.add('selected');
-
-                        // Clear existing charts and categories
-                        clearCharts();
-                        // Fetch data for the selected run
-                        fetchRunData(selectedProjectId, selectedRunId);
-                    });
-
-                    runItem.appendChild(runLink);
-                    runsList.appendChild(runItem);
-                });
-
-                // Select the latest run by default if not already selected
-                if (!selectedRunId && runs.length > 0) {
-                    selectedRunId = runs[0].id;
-                    const firstRunLink = runsList.querySelector('a');
-                    if (firstRunLink) {
-                        firstRunLink.classList.add('selected');
-                    }
-                    fetchRunData(selectedProjectId, selectedRunId);
-                }
-            }
-
-            /**
-             * Function to handle project selection change.
-             * @param {string} projectId - The ID of the selected project.
-             */
-            async function onProjectChange(projectId) {
-                selectedProjectId = parseInt(projectId);
-                selectedRunId = null;
-                runs = [];
-                clearCharts();
-
-                try {
-                    // Fetch runs for the selected project
-                    const runsResponse = await fetch(`/projects/${projectId}/runs`);
-                    if (!runsResponse.ok) {
-                        throw new Error('Network response was not ok while fetching runs.');
-                    }
-                    runs = await runsResponse.json();
-                    console.log('Runs data fetched:', runs);
-
-                    // Populate the runs sidebar
-                    populateRunsSidebar();
-                } catch (error) {
-                    console.error('Error fetching runs:', error);
-                }
-            }
-
-            function applyLogEntry(logEntry) {
-                const category = logEntry.category;
-                const name = logEntry.name;
-
-                let data = logEntry?.data || logEntry;
-                logEntry.value = data?.value_double ?? data?.value_bool ?? data?.value_json ?? data?.value_string ?? data?.value ?? logEntry.value;
-
-                // If value is a string, try to parse it as JSON
-                if (typeof logEntry.value === 'string') {
-                    try {
-                        logEntry.value = JSON.parse(logEntry.value);
-                    } catch (error) {
-                        console.error('Error parsing log entry value:', error);
-                    }
-                }
-
-                if (!category || !name) {
-                    console.warn('Log entry missing category or name:', logEntry);
-                    return;
-                }
-
-                // Determine chart type based on value
-                let chartType = 'line';
-                if (typeof logEntry.value === 'object' && !Array.isArray(logEntry.value)) {
-                    console.log("Object value detected, using bar chart for histogram.");
-                    chartType = 'bar'; // Use bar chart for histogram
-                }
-
-                // Create the chart if it doesn't exist
-                if (!categories[category]?.charts[name]) {
-                    console.log('Creating chart:', category, name, chartType, logEntry.value);
-                    let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
-                    createChartForName(category, name, value_count, chartType);
-                    console.log(categories[category]?.charts[name].chart.config.type);
-                }
-
-                // Update chart data
-                const chartInfo = categories[category]?.charts[name];
-                console.log('Updating chart:', category, name, chartInfo);
-                if (!chartInfo) {
-                    console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
-                    return;
-                }
-
-                if (chartInfo.chart.config.type === 'bar') {
-                    // Histogram data: overwrite existing data
-                    const labels = Object.keys(logEntry.value);
-                    const values = Object.values(logEntry.value);
-                    console.log('Updating bar chart data:', labels, values);
-                    chartInfo.data.labels = labels;
-                    chartInfo.data.datasets[0].data = values;
-                } else {
-                    chartInfo.data.labels.push(logEntry.step);
-
-                    if (Array.isArray(logEntry.value)) {
-                        logEntry.value.forEach((value, i) => {
-                            if (chartInfo.data.datasets[i]) {
-                                chartInfo.data.datasets[i].data.push(value);
-                            }
-                        });
-                    } else {
-                        chartInfo.data.datasets[0].data.push(logEntry.value);
-                    }
-                }
-
-                chartInfo.chart.update();
-            }
-
-            /**
-             * Fetch run data and populate charts.
-             * @param {string} projectId - The ID of the project.
-             * @param {string} runId - The ID of the run.
-             */
-            async function fetchRunData(projectId, runId) {
-                try {
-                    const response = await fetch(`/projects/${projectId}/runs/${runId}`);
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok while fetching run data.');
-                    }
-                    const data = await response.json();
-                    console.log('Run data fetched:', data);
-
-                    // if there's no data then update the ui to show that there's no data and return
-                    if (data.length === 0) {
-                        const mainChartsContainer = document.getElementById('charts-container');
-                        if (mainChartsContainer) {
-                            mainChartsContainer.innerHTML = '<p>No data available for this run.</p>';
-                        }
-                        return;
-                    }
-
-                    // Process each log entry
-                    data.forEach(logEntry => {
-                        logEntry.data = JSON.parse(logEntry.data);
-                        applyLogEntry(logEntry);
-                    });
-
-                    // Set initial load complete flag
-                    isInitialLoadComplete = true;
-                } catch (error) {
-                    console.error('Error fetching run data:', error);
-                }
-            }
-
-            /**
-             * Fetch initial projects and set up the dashboard.
-             */
-            async function initializeDashboard() {
-                try {
-                    // Fetch projects
-                    const projectsResponse = await fetch('/projects');
-                    if (!projectsResponse.ok) {
-                        throw new Error('Network response was not ok while fetching projects.');
-                    }
-                    projects = await projectsResponse.json();
-                    console.log('Projects fetched:', projects);
-
-                    if (projects.length === 0) {
-                        const dashboardTitle = document.getElementById('dashboard-title');
-                        dashboardTitle.textContent = "No projects available.";
-                        const sidebar = document.getElementById('sidebar');
-                        sidebar.innerHTML = '<p>No projects to display.</p>';
-                        return;
-                    }
-
-                    // Populate the projects dropdowns
-                    populateProjectsDropdown();
-
-                    // Update the dashboard title
-                    const dashboardTitle = document.getElementById('dashboard-title');
-                    const selectedProject = projects.find(p => p.id === selectedProjectId);
-                    dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
-
-                    // Fetch runs for the selected project
-                    await onProjectChange(selectedProjectId);
-                } catch (error) {
-                    console.error('Error initializing dashboard:', error);
-                }
-            }
-
-            /**
-             * Setup WebSocket to receive real-time updates.
-             */
-            function setupWebSocket() {
-                const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-                const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
-
-                ws.onmessage = function(event) {
-                    const msg = JSON.parse(event.data);
-                    const command = msg.command;
-                    if (command === 'LOG') {
-                        // Only update if the user is viewing the latest run of the selected project
-                        // TODO: we should subscribe to the selected project and run only
-                        if (selectedRunId !== msg.data.run_id || selectedProjectId !== msg.data.project_id || !isInitialLoadComplete) {
-                            return;
-                        }
-                        applyLogEntry(msg.data);
-                    }
-                };
-
-                ws.onclose = function(event) {
-                    console.log('WebSocket closed. Reconnecting...');
-                    setTimeout(setupWebSocket, 1000);
-                };
-
-                ws.onerror = function(error) {
-                    console.error('WebSocket error:', error);
-                    ws.close();
-                };
-            }
-
-            /**
-             * Utility function to generate a random color for chart lines.
-             * Ensures that each chart has a distinct color.
-             */
-             function getRandomColor() {
-                // const letters = '01234567'; // Limit to lower half for darker shades
-                // let color = '#';
-                // for (let i = 0; i < 6; i++) {
-                //     color += letters[Math.floor(Math.random() * letters.length)];
-                // }
-                // return color;
-
-                // return reddish color
-                return 'rgb(0, 99, 132)';
-            }
-
-            // Initialize the dashboard
             initializeDashboard();
             setupWebSocket();
+
+            // Setup date range defaults (e.g., last 7 days to today).
+            setDefaultDateRange();
+
+            // Add event listeners for the date range update button
+            const updateDateRangeButton = document.getElementById('update-date-range');
+            updateDateRangeButton.addEventListener('click', onDateRangeUpdate);
 
             // Add event listeners for project selection on both dropdowns
             const projectSelectSidebar = document.getElementById('project-select-sidebar');
             const projectSelectHeader = document.getElementById('project-select-header');
 
-            function handleProjectSelection(event) {
-                const selectedProjectId = event.target.value;
-
-                // Update both dropdowns to reflect the selection
-                projectSelectSidebar.value = selectedProjectId;
-                projectSelectHeader.value = selectedProjectId;
-
-                // Update the dashboard title
-                const selectedProject = projects.find(p => p.id === selectedProjectId);
-                const dashboardTitle = document.getElementById('dashboard-title');
-                dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
-
-                // Handle project change
-                onProjectChange(selectedProjectId);
-            }
-
             projectSelectSidebar.addEventListener('change', handleProjectSelection);
             projectSelectHeader.addEventListener('change', handleProjectSelection);
+
+            // Modal close event
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalClose = document.getElementById('modal-close');
+            modalClose.addEventListener('click', () => {
+                modalOverlay.style.display = 'none';
+                if (modalChartInstance) {
+                    modalChartInstance.destroy();
+                    modalChartInstance = null;
+                }
+            });
         });
+
+        /**
+         * Utility to set default date range inputs to last 7 days → today
+         */
+        function setDefaultDateRange() {
+            const startDateInput = document.getElementById('start-date-input');
+            const endDateInput = document.getElementById('end-date-input');
+
+            const now = new Date();
+            const sevenDaysAgo = new Date(now);
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            // Format to YYYY-MM-DD
+            const format = (date) => {
+                const yyyy = date.getFullYear();
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const dd = String(date.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            };
+
+            startDateInput.value = format(sevenDaysAgo);
+            endDateInput.value = format(now);
+        }
+
+        /**
+         * Handle the date range update request.
+         * This will refetch the run data with the specified time window.
+         */
+        function onDateRangeUpdate() {
+            if (!selectedProjectId || !selectedRunId) return;
+            clearCharts();
+            fetchRunData(selectedProjectId, selectedRunId);
+        }
+
+        /**
+         * Called when a user selects a project from the dropdown.
+         * @param {Event} event
+         */
+        async function handleProjectSelection(event) {
+            const chosenProjectId = event.target.value;
+            // Update both dropdowns to reflect the selection
+            const projectSelectSidebar = document.getElementById('project-select-sidebar');
+            const projectSelectHeader = document.getElementById('project-select-header');
+            projectSelectSidebar.value = chosenProjectId;
+            projectSelectHeader.value = chosenProjectId;
+
+            // Update the dashboard title
+            const selectedProject = projects.find(p => p.id === parseInt(chosenProjectId));
+            const dashboardTitle = document.getElementById('dashboard-title');
+            dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+            await onProjectChange(chosenProjectId);
+        }
+
+        /**
+         * Fetch initial projects and set up the dashboard.
+         */
+        async function initializeDashboard() {
+            try {
+                // Fetch projects
+                const projectsResponse = await fetch('/projects');
+                if (!projectsResponse.ok) {
+                    throw new Error('Network response was not ok while fetching projects.');
+                }
+                projects = await projectsResponse.json();
+                console.log('Projects fetched:', projects);
+
+                if (projects.length === 0) {
+                    const dashboardTitle = document.getElementById('dashboard-title');
+                    dashboardTitle.textContent = "No projects available.";
+                    const sidebar = document.getElementById('sidebar');
+                    sidebar.innerHTML = '<p>No projects to display.</p>';
+                    return;
+                }
+
+                // Populate the projects dropdowns
+                populateProjectsDropdown();
+
+                // Pick the most recently updated project by default
+                const mostRecentProject = projects.reduce((prev, current) => {
+                    return (prev.updated_at > current.updated_at) ? prev : current;
+                });
+                selectedProjectId = mostRecentProject.id;
+
+                // Update the dashboard title
+                const dashboardTitle = document.getElementById('dashboard-title');
+                const selectedProject = projects.find(p => p.id === selectedProjectId);
+                dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+                // Fetch runs for the selected project
+                await onProjectChange(selectedProjectId);
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+            }
+        }
+
+        /**
+         * Setup WebSocket to receive real-time updates.
+         */
+        function setupWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+
+            ws.onmessage = function(event) {
+                const msg = JSON.parse(event.data);
+                const command = msg.command;
+                if (command === 'LOG') {
+                    // Only update if the user is viewing the latest run of the selected project
+                    if (selectedRunId !== msg.data.run_id || selectedProjectId !== msg.data.project_id || !isInitialLoadComplete) {
+                        return;
+                    }
+                    applyLogEntry(msg.data);
+                }
+            };
+
+            ws.onclose = function(event) {
+                console.log('WebSocket closed. Reconnecting...');
+                setTimeout(setupWebSocket, 1000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                ws.close();
+            };
+        }
+
+        /**
+         * Populate the projects dropdowns.
+         */
+        function populateProjectsDropdown() {
+            const projectSelectSidebar = document.getElementById('project-select-sidebar');
+            const projectSelectHeader = document.getElementById('project-select-header');
+            if (!projectSelectSidebar || !projectSelectHeader) {
+                console.error('Project select elements not found in the DOM.');
+                return;
+            }
+
+            projectSelectSidebar.innerHTML = '';
+            projectSelectHeader.innerHTML = '';
+
+            projects.forEach((project) => {
+                const optionSidebar = document.createElement('option');
+                optionSidebar.value = project.id;
+                optionSidebar.textContent = project.name;
+                projectSelectSidebar.appendChild(optionSidebar);
+
+                const optionHeader = document.createElement('option');
+                optionHeader.value = project.id;
+                optionHeader.textContent = project.name;
+                projectSelectHeader.appendChild(optionHeader);
+            });
+        }
+
+        /**
+         * Handle project change: fetch runs, clear charts, etc.
+         * @param {string} projectId
+         */
+        async function onProjectChange(projectId) {
+            selectedProjectId = parseInt(projectId);
+            selectedRunId = null;
+            runs = [];
+            clearCharts();
+
+            try {
+                // Fetch runs for the selected project
+                const runsResponse = await fetch(`/projects/${projectId}/runs`);
+                if (!runsResponse.ok) {
+                    throw new Error('Network response was not ok while fetching runs.');
+                }
+                runs = await runsResponse.json();
+                console.log('Runs data fetched:', runs);
+
+                // Populate the runs sidebar
+                populateRunsSidebar();
+            } catch (error) {
+                console.error('Error fetching runs:', error);
+            }
+        }
+
+        /**
+         * Populate the runs list in the sidebar.
+         */
+        function populateRunsSidebar() {
+            const runsList = document.querySelector('#runs-list ul');
+            if (!runsList) {
+                console.error('Runs list element not found in the DOM.');
+                return;
+            }
+
+            runsList.innerHTML = '';
+
+            if (runs.length === 0) {
+                runsList.innerHTML = '<li>No runs available for this project.</li>';
+                return;
+            }
+
+            if (runs.length > 0) {
+                latestRunId = runs[0].id;
+            }
+
+            runs.forEach((run) => {
+                const runItem = document.createElement('li');
+                const runLink = document.createElement('a');
+                runLink.href = '#';
+                runLink.textContent = 'Run: ' + run.start_time;
+                runLink.dataset.runId = run.id;
+
+                // Highlight the selected run
+                if (run.id === selectedRunId) {
+                    runLink.classList.add('selected');
+                }
+
+                runLink.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (run.id === selectedRunId) return;
+
+                    selectedRunId = run.id;
+                    // Update the selected link's appearance
+                    const allRunLinks = runsList.querySelectorAll('a');
+                    allRunLinks.forEach(link => link.classList.remove('selected'));
+                    runLink.classList.add('selected');
+
+                    // Clear existing charts and categories
+                    clearCharts();
+                    // Fetch data for the selected run
+                    fetchRunData(selectedProjectId, selectedRunId);
+                });
+
+                runItem.appendChild(runLink);
+                runsList.appendChild(runItem);
+            });
+
+            // Select the latest run by default if not already selected
+            if (!selectedRunId && runs.length > 0) {
+                selectedRunId = runs[0].id;
+                const firstRunLink = runsList.querySelector('a');
+                if (firstRunLink) {
+                    firstRunLink.classList.add('selected');
+                }
+                fetchRunData(selectedProjectId, selectedRunId);
+            }
+        }
+
+        /**
+         * Fetch run data for the selected run.
+         * Incorporates date range if provided in the UI.
+         * @param {string} projectId
+         * @param {string} runId
+         */
+        async function fetchRunData(projectId, runId) {
+            // Grab date range from UI
+            const startDate = document.getElementById('start-date-input').value;
+            const endDate = document.getElementById('end-date-input').value;
+
+            const queryParams = new URLSearchParams();
+            if (startDate) queryParams.set('start_date', startDate);
+            if (endDate) queryParams.set('end_date', endDate);
+
+            try {
+                const response = await fetch(`/projects/${projectId}/runs/${runId}?${queryParams.toString()}`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok while fetching run data.');
+                }
+                const data = await response.json();
+                console.log('Run data fetched:', data);
+
+                // If there's no data then update UI and return
+                if (data.length === 0) {
+                    const mainChartsContainer = document.getElementById('charts-container');
+                    if (mainChartsContainer) {
+                        mainChartsContainer.innerHTML = '<p>No data available for this run.</p>';
+                    }
+                    return;
+                }
+
+                // Process each log entry
+                data.forEach(logEntry => {
+                    logEntry.data = JSON.parse(logEntry.data);
+                    applyLogEntry(logEntry);
+                });
+
+                isInitialLoadComplete = true;
+            } catch (error) {
+                console.error('Error fetching run data:', error);
+            }
+        }
+
+        /**
+         * Apply a log entry to the appropriate chart or create a new one if needed.
+         * @param {Object} logEntry
+         */
+        function applyLogEntry(logEntry) {
+            const category = logEntry.category;
+            const name = logEntry.name;
+
+            let data = logEntry?.data || logEntry;
+            logEntry.value = data?.value_double ?? data?.value_bool ?? data?.value_json ?? data?.value_string ?? data?.value ?? logEntry.value;
+
+            if (typeof logEntry.value === 'string') {
+                try {
+                    logEntry.value = JSON.parse(logEntry.value);
+                } catch (error) {
+                    console.error('Error parsing log entry value:', error);
+                }
+            }
+
+            if (!category || !name) {
+                console.warn('Log entry missing category or name:', logEntry);
+                return;
+            }
+
+            // Determine chart type (histogram => bar, else line).
+            let chartType = 'line';
+            if (typeof logEntry.value === 'object' && !Array.isArray(logEntry.value)) {
+                chartType = 'bar';
+            }
+
+            // Create the chart if it doesn't exist
+            if (!categories[category]?.charts[name]) {
+                let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
+                createChartForName(category, name, value_count, chartType);
+            }
+
+            // Update chart data
+            const chartInfo = categories[category]?.charts[name];
+            if (!chartInfo) {
+                console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
+                return;
+            }
+
+            if (chartInfo.chart.config.type === 'bar') {
+                // For histograms
+                const labels = Object.keys(logEntry.value);
+                const values = Object.values(logEntry.value);
+                chartInfo.data.labels = labels;
+                chartInfo.data.datasets[0].data = values;
+            } else {
+                chartInfo.data.labels.push(logEntry.step);
+                if (Array.isArray(logEntry.value)) {
+                    logEntry.value.forEach((val, i) => {
+                        if (chartInfo.data.datasets[i]) {
+                            chartInfo.data.datasets[i].data.push(val);
+                        }
+                    });
+                } else {
+                    chartInfo.data.datasets[0].data.push(logEntry.value);
+                }
+            }
+
+            chartInfo.chart.update();
+        }
+
+        /**
+         * Create a new chart within a specified category.
+         * @param {string} category
+         * @param {string} name
+         * @param {number} value_count
+         * @param {string} chartType
+         */
+        function createChartForName(category, name, value_count, chartType = 'line') {
+            // Ensure category container
+            let categorySection = categories[category]?.section;
+            if (!categorySection) {
+                categorySection = document.createElement('details');
+                categorySection.className = 'category-section';
+
+                const summary = document.createElement('summary');
+                summary.textContent = category;
+                categorySection.appendChild(summary);
+
+                const chartsWrapper = document.createElement('div');
+                chartsWrapper.className = 'charts-wrapper';
+                categorySection.appendChild(chartsWrapper);
+
+                const mainChartsContainer = document.getElementById('charts-container');
+                if (!mainChartsContainer) {
+                    console.error('Main charts container not found.');
+                    return;
+                }
+                mainChartsContainer.appendChild(categorySection);
+
+                categories[category] = { section: categorySection, charts: {} };
+            }
+
+            if (categories[category].charts[name]) {
+                console.warn(`Chart "${name}" already exists in category "${category}".`);
+                return;
+            }
+
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'chart-container';
+
+            const chartTitle = document.createElement('div');
+            chartTitle.className = 'chart-title';
+            chartTitle.textContent = name;
+            chartContainer.appendChild(chartTitle);
+
+            const canvas = document.createElement('canvas');
+            chartContainer.appendChild(canvas);
+
+            const chartsWrapper = categorySection.querySelector('.charts-wrapper');
+
+            // Insert in sorted order
+            const newChartNumber = extractNumberFromChartName(name);
+            let inserted = false;
+            for (let i = 0; i < chartsWrapper.children.length; i++) {
+                const existingChartContainer = chartsWrapper.children[i];
+                const existingChartTitle = existingChartContainer.querySelector('.chart-title').textContent;
+                const existingChartNumber = extractNumberFromChartName(existingChartTitle);
+                if (newChartNumber !== null && existingChartNumber !== null) {
+                    if (newChartNumber < existingChartNumber) {
+                        chartsWrapper.insertBefore(chartContainer, existingChartContainer);
+                        inserted = true;
+                        break;
+                    }
+                } else {
+                    if (existingChartTitle.localeCompare(name) > 0) {
+                        chartsWrapper.insertBefore(chartContainer, existingChartContainer);
+                        inserted = true;
+                        break;
+                    }
+                }
+            }
+            if (!inserted) {
+                chartsWrapper.appendChild(chartContainer);
+            }
+
+            // Initialize chart data
+            const chartData = {
+                labels: [],
+                datasets: []
+            };
+
+            if (chartType === 'bar') {
+                chartData.datasets.push({
+                    label: name,
+                    data: [],
+                    backgroundColor: getRandomColor(),
+                    borderColor: getRandomColor(),
+                    borderWidth: 1
+                });
+            } else {
+                // line chart
+                for (let i = 0; i < value_count; i++) {
+                    chartData.datasets.push({
+                        label: value_count > 1 ? name + ' ' + i : name,
+                        data: [],
+                        borderColor: getRandomColor(),
+                        backgroundColor: 'rgba(0, 0, 0, 0)',
+                        tension: 0
+                    });
+                }
+            }
+
+            const config = {
+                type: chartType,
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false,
+                        },
+                        title: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: chartType === 'bar' ? 'Bins' : 'Step'
+                            },
+                            ticks: {
+                                autoSkip: true
+                            },
+                            grid: {
+                                display: true,
+                                color: '#444'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: chartType === 'bar' ? 'Frequency' : 'Value'
+                            },
+                            grid: {
+                                display: true,
+                                color: '#444'
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Create the chart
+            let chartInstance;
+            try {
+                chartInstance = new Chart(canvas, config);
+            } catch (error) {
+                console.error(`Error creating chart "${name}" in category "${category}":`, error);
+                return;
+            }
+
+            // Store reference
+            categories[category].charts[name] = {
+                chart: chartInstance,
+                data: chartData
+            };
+
+            // Add click event to open this chart in a modal
+            chartContainer.addEventListener('click', () => openChartInModal(category, name));
+        }
+
+        /**
+         * Clears all charts and resets the categories object.
+         */
+        function clearCharts() {
+            for (const category in categories) {
+                const chartsInCategory = categories[category].charts;
+                for (const chartName in chartsInCategory) {
+                    chartsInCategory[chartName].chart.destroy();
+                }
+            }
+            for (const category in categories) {
+                delete categories[category];
+            }
+            const mainChartsContainer = document.getElementById('charts-container');
+            if (mainChartsContainer) {
+                mainChartsContainer.innerHTML = '';
+            }
+        }
+
+        /**
+         * Open the selected chart in a larger modal view.
+         * Optionally re-fetch more data for it, if desired.
+         * @param {string} category
+         * @param {string} name
+         */
+        function openChartInModal(category, name) {
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalCanvas = document.getElementById('modal-chart');
+            if (!categories[category] || !categories[category].charts[name]) return;
+
+            // Destroy any existing modal chart instance
+            if (modalChartInstance) {
+                modalChartInstance.destroy();
+            }
+
+            // Show the modal
+            modalOverlay.style.display = 'flex';
+
+            // (Optional) Could fetch a bigger data window for just this chart here
+            // fetchMoreDataForChart(category, name).then(...)
+
+            // Create a new Chart.js instance in the modal
+            const originalChart = categories[category].charts[name].chart;
+            const newConfig = JSON.parse(JSON.stringify(originalChart.config));
+            // You can adjust newConfig if you'd like to show more data, etc.
+
+            // Ensure the 'options.responsive' is true in the enlarged chart.
+            newConfig.options.responsive = true;
+            newConfig.options.maintainAspectRatio = false;
+
+            // Create the new chart in the modal
+            modalChartInstance = new Chart(modalCanvas, newConfig);
+        }
+
+        /**
+         * Utility function to generate a random color for chart lines.
+         */
+        function getRandomColor() {
+            // Return a color that stands out.
+            return 'rgb(0, 99, 132)';
+        }
+
     </script>
 </body>
 </html>
