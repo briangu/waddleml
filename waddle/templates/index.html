@@ -921,8 +921,11 @@
                 data: chartData
             };
 
-            // Add click event to open this chart in a modal
-            chartContainer.addEventListener('click', () => openChartInModal(category, name));
+            // Add click event to open this chart in a modal if the chart isn't already modal
+            if (!config.options.is_modal) {
+                console.log(config);
+                chartContainer.addEventListener('click', () => openChartInModal(category, name));
+            }
         }
 
         /**
@@ -966,17 +969,26 @@
             // (Optional) Could fetch a bigger data window for just this chart here
             // fetchMoreDataForChart(category, name).then(...)
 
-            // Create a new Chart.js instance in the modal
-            const originalChart = categories[category].charts[name].chart;
-            const newConfig = JSON.parse(JSON.stringify(originalChart.config));
-            // You can adjust newConfig if you'd like to show more data, etc.
+            // // Create a new Chart.js instance in the modal
+            // const originalChart = categories[category].charts[name].chart;
+            // const newConfig = JSON.parse(JSON.stringify(originalChart.config));
+            // // You can adjust newConfig if you'd like to show more data, etc.
 
-            // Ensure the 'options.responsive' is true in the enlarged chart.
-            newConfig.options.responsive = true;
-            newConfig.options.maintainAspectRatio = false;
+            // // Ensure the 'options.responsive' is true in the enlarged chart.
+            // if (!newConfig.options) newConfig.options = {};
+            // newConfig.options.is_modal = true;
+            // newConfig.options.responsive = true;
+            // newConfig.options.maintainAspectRatio = false;
 
-            // Create the new chart in the modal
-            modalChartInstance = new Chart(modalCanvas, newConfig);
+            // // Create the new chart in the modal
+            // modalChartInstance = new Chart(modalCanvas, newConfig);
+
+            // // put the data into the new chart
+            // const originalData = originalChart.data;
+            // modalChartInstance.data = JSON.parse(JSON.stringify(originalData));
+            // modalChartInstance.update();
+
+            modalChartInstance = new Chart(modalCanvas, categories[category].charts[name].chart.config);
         }
 
         /**
