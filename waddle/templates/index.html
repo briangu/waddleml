@@ -842,6 +842,7 @@
                 datasets: []
             };
 
+            beginAtZero = false;
             if (chartType === 'bar') {
                 chartData.datasets.push({
                     label: name,
@@ -852,11 +853,12 @@
                 });
             } else {
                 // line chart
+                beginAtZero = value_count > 0;
                 for (let i = 0; i < value_count; i++) {
                     chartData.datasets.push({
                         label: value_count > 1 ? name + ' ' + i : name,
                         data: [],
-                        borderColor: getRandomColor(),
+                        borderColor: getRandomColor(i),
                         backgroundColor: 'rgba(0, 0, 0, 0)',
                         tension: 0
                     });
@@ -892,7 +894,7 @@
                             }
                         },
                         y: {
-                            beginAtZero: true,
+                            // beginAtZero: beginAtZero,
                             title: {
                                 display: true,
                                 text: chartType === 'bar' ? 'Frequency' : 'Value'
@@ -994,9 +996,10 @@
         /**
          * Utility function to generate a random color for chart lines.
          */
-        function getRandomColor() {
-            // Return a color that stands out.
-            return 'rgb(0, 99, 132)';
+        function getRandomColor(index = 0) {
+            // return variations of this 0,99,132 color based on index
+            const baseColor = [0, 99, 132];
+            return `rgba(${baseColor[0]}, ${baseColor[1] + index * 10}, ${baseColor[2] + index * 10}, 1)`;
         }
 
     </script>
