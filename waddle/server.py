@@ -447,23 +447,34 @@ async def get_run(
         # We'll interpret start_date and end_date as inclusive bounds.
         # Adjust as needed, e.g. end_date + " 23:59:59" for day-based inclusivity.
         if start_datetime:
-            # For safety, parse and re-format in a consistent way:
+            # Parse start_datetime (accepts ISO 8601 or date-time strings)
             try:
-                start_dt = datetime.strptime(start_datetime, "%Y-%m-%d %H:%M:%S")  # e.g. "2021-01-01 00:00:00"
-                start_str = start_dt.strftime("%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="Invalid start_date format (expected YYYY-MM-DD).")
-            date_filters.append("timestamp >= ?")
-            date_params.append(start_str)
+                start_dt = pd.to_datetime(start_datetime, errors='raise')
+            except Exception:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid start_datetime format (expected ISO format YYYY-MM-DDTHH:MM:SS)."
+                )
+            # Use Python datetime for binding to TIMESTAMP parameter
+            # filter on timestamp, casting the parameter to TIMESTAMP for safety
+            date_filters.append("timestamp >= CAST(? AS TIMESTAMP)")
+            date_params.append(start_dt.to_pydatetime())
 
         if end_datetime:
+            # Parse end_datetime (accepts ISO 8601 or date-only strings)
             try:
-                end_dt = datetime.strptime(end_datetime, "%Y-%m-%d")
-                end_str = end_dt.strftime("%Y-%m-%d 23:59:59")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="Invalid end_date format (expected YYYY-MM-DD).")
-            date_filters.append("timestamp <= ?")
-            date_params.append(end_str)
+                end_dt = pd.to_datetime(end_datetime, errors='raise')
+                # normalize to end of day (23:59:59) for date-bound queries
+                end_dt = end_dt.replace(hour=23, minute=59, second=59)
+            except Exception:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid end_datetime format (expected ISO format YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)."
+                )
+            # Use Python datetime for binding to TIMESTAMP parameter
+            # filter on timestamp, casting the parameter to TIMESTAMP for safety
+            date_filters.append("timestamp <= CAST(? AS TIMESTAMP)")
+            date_params.append(end_dt.to_pydatetime())
 
         # We'll accumulate all log rows in a list of dicts
         data = []

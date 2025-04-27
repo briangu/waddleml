@@ -5,7 +5,7 @@
     <title>Waddle Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* --- (Existing CSS styles unchanged) --- */
+        /* --- (Existing CSS styles) --- */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -168,7 +168,7 @@
             box-shadow: 0 2px 4px rgba(255,255,255,0.05);
             display: flex;
             flex-direction: column;
-            cursor: pointer; /* We'll use this to let users click to expand */
+            cursor: pointer;
         }
 
         .chart-title {
@@ -304,7 +304,7 @@
 </head>
 <body>
     <div id="header">
-        <img src="static/waddleml_logo.jpg" alt="WaddleML Logo" id="project-logo">
+        <img src="/static/waddleml_logo.jpg" alt="WaddleML Logo" id="project-logo">
         <h1 id="dashboard-title">Waddle Dashboard</h1>
     </div>
     <div id="main-container">
@@ -474,7 +474,7 @@
                     throw new Error('Network response was not ok while fetching projects.');
                 }
                 projects = await projectsResponse.json();
-                console.log('Projects fetched:', projects);
+                // console.log('Projects fetched:', projects);
 
                 if (projects.length === 0) {
                     const dashboardTitle = document.getElementById('dashboard-title');
@@ -484,19 +484,24 @@
                     return;
                 }
 
+                // Sort by updated_at descending to get the "most recent" project easily
+                projects.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                const mostRecentProject = projects[0];
+                selectedProjectId = mostRecentProject.id;
+
                 // Populate the projects dropdowns
                 populateProjectsDropdown();
-
-                // Pick the most recently updated project by default
-                const mostRecentProject = projects.reduce((prev, current) => {
-                    return (prev.updated_at > current.updated_at) ? prev : current;
-                });
-                selectedProjectId = mostRecentProject.id;
 
                 // Update the dashboard title
                 const dashboardTitle = document.getElementById('dashboard-title');
                 const selectedProject = projects.find(p => p.id === selectedProjectId);
                 dashboardTitle.textContent = "Project: " + (selectedProject ? selectedProject.name : 'N/A');
+
+                // Ensure both dropdowns show the chosen project
+                const projectSelectSidebar = document.getElementById('project-select-sidebar');
+                const projectSelectHeader = document.getElementById('project-select-header');
+                projectSelectSidebar.value = selectedProjectId;
+                projectSelectHeader.value = selectedProjectId;
 
                 // Fetch runs for the selected project
                 await onProjectChange(selectedProjectId);
@@ -524,7 +529,7 @@
                 }
             };
 
-            ws.onclose = function(event) {
+            ws.onclose = function() {
                 console.log('WebSocket closed. Reconnecting...');
                 setTimeout(setupWebSocket, 1000);
             };
@@ -579,7 +584,9 @@
                     throw new Error('Network response was not ok while fetching runs.');
                 }
                 runs = await runsResponse.json();
-                console.log('Runs data fetched:', runs);
+                // Sort runs by newest start_time first
+                runs.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+                // console.log('Runs data fetched:', runs);
 
                 // Populate the runs sidebar
                 populateRunsSidebar();
@@ -589,7 +596,7 @@
         }
 
         /**
-         * Populate the runs list in the sidebar.
+         * Populate the runs list in the sidebar, defaulting to the newest run.
          */
         function populateRunsSidebar() {
             const runsList = document.querySelector('#runs-list ul');
@@ -605,18 +612,18 @@
                 return;
             }
 
-            if (runs.length > 0) {
-                latestRunId = runs[0].id;
-            }
+            // The first run is now the newest due to sorting
+            latestRunId = runs[0].id;
 
             runs.forEach((run) => {
                 const runItem = document.createElement('li');
                 const runLink = document.createElement('a');
                 runLink.href = '#';
-                runLink.textContent = 'Run: ' + run.start_time;
+                // You can customize how you display the run info below
+                runLink.textContent = 'Run: ' + new Date(run.start_time).toLocaleString();
                 runLink.dataset.runId = run.id;
 
-                // Highlight the selected run
+                // If this run is the selected, highlight it
                 if (run.id === selectedRunId) {
                     runLink.classList.add('selected');
                 }
@@ -641,7 +648,7 @@
                 runsList.appendChild(runItem);
             });
 
-            // Select the latest run by default if not already selected
+            // Select the newest run by default if not already selected
             if (!selectedRunId && runs.length > 0) {
                 selectedRunId = runs[0].id;
                 const firstRunLink = runsList.querySelector('a');
@@ -649,6 +656,11 @@
                     firstRunLink.classList.add('selected');
                 }
                 fetchRunData(selectedProjectId, selectedRunId);
+            } else {
+                // If we somehow have a stale selectedRunId, just load that
+                if (selectedRunId) {
+                    fetchRunData(selectedProjectId, selectedRunId);
+                }
             }
         }
 
@@ -664,8 +676,15 @@
             const endDate = document.getElementById('end-date-input').value;
 
             const queryParams = new URLSearchParams();
-            if (startDate) queryParams.set('start_date', startDate);
-            if (endDate) queryParams.set('end_date', endDate);
+            // Use server-expected parameter names for date filtering
+            if (startDate) {
+                // server expects full datetime for start; use start of day
+                queryParams.set('start_datetime', `${startDate} 00:00:00`);
+            }
+            if (endDate) {
+                // server expects date for end; will interpret as end of day
+                queryParams.set('end_datetime', endDate);
+            }
 
             try {
                 const response = await fetch(`/projects/${projectId}/runs/${runId}?${queryParams.toString()}`);
@@ -673,7 +692,7 @@
                     throw new Error('Network response was not ok while fetching run data.');
                 }
                 const data = await response.json();
-                console.log('Run data fetched:', data);
+                // console.log('Run data fetched:', data);
 
                 // If there's no data then update UI and return
                 if (data.length === 0) {
@@ -705,13 +724,15 @@
             const name = logEntry.name;
 
             let data = logEntry?.data || logEntry;
-            logEntry.value = data?.value_double ?? data?.value_bool ?? data?.value_json ?? data?.value_string ?? data?.value ?? logEntry.value;
+            // Determine final numeric or structured value
+            logEntry.value = data.value_double ?? data.value_bool ?? data.value_json ?? data.value_string ?? data.value ?? logEntry.value;
 
+            // Attempt to parse if it's a string that might be JSON
             if (typeof logEntry.value === 'string') {
                 try {
                     logEntry.value = JSON.parse(logEntry.value);
-                } catch (error) {
-                    console.error('Error parsing log entry value:', error);
+                } catch {
+                    // Leave as a string if not valid JSON
                 }
             }
 
@@ -720,7 +741,8 @@
                 return;
             }
 
-            // Determine chart type (histogram => bar, else line).
+            // Decide chart type (histogram => bar, else line).
+            // If the value is a non-array object, we treat it as a histogram.
             let chartType = 'line';
             if (typeof logEntry.value === 'object' && !Array.isArray(logEntry.value)) {
                 chartType = 'bar';
@@ -728,24 +750,25 @@
 
             // Create the chart if it doesn't exist
             if (!categories[category]?.charts[name]) {
-                let value_count = Array.isArray(logEntry.value) ? logEntry.value.length : 1;
-                createChartForName(category, name, value_count, chartType);
+                const valueCount = (Array.isArray(logEntry.value)) ? logEntry.value.length : 1;
+                createChartForName(category, name, valueCount, chartType);
             }
 
             // Update chart data
             const chartInfo = categories[category]?.charts[name];
             if (!chartInfo) {
-                console.error(`ChartInfo is undefined for chart "${name}" under category "${category}".`);
+                console.error(`No chart found for "${name}" in category "${category}".`);
                 return;
             }
 
             if (chartInfo.chart.config.type === 'bar') {
-                // For histograms
+                // For histograms, we overwrite each time with the latest bin data
                 const labels = Object.keys(logEntry.value);
                 const values = Object.values(logEntry.value);
                 chartInfo.data.labels = labels;
                 chartInfo.data.datasets[0].data = values;
             } else {
+                // For line charts: push the new step on X, new value(s) on Y
                 chartInfo.data.labels.push(logEntry.step);
                 if (Array.isArray(logEntry.value)) {
                     logEntry.value.forEach((val, i) => {
@@ -765,10 +788,10 @@
          * Create a new chart within a specified category.
          * @param {string} category
          * @param {string} name
-         * @param {number} value_count
+         * @param {number} valueCount
          * @param {string} chartType
          */
-        function createChartForName(category, name, value_count, chartType = 'line') {
+        function createChartForName(category, name, valueCount, chartType = 'line') {
             // Ensure category container
             let categorySection = categories[category]?.section;
             if (!categorySection) {
@@ -811,7 +834,7 @@
 
             const chartsWrapper = categorySection.querySelector('.charts-wrapper');
 
-            // Insert in sorted order
+            // Insert in a sorted manner by extracting numeric portion
             const newChartNumber = extractNumberFromChartName(name);
             let inserted = false;
             for (let i = 0; i < chartsWrapper.children.length; i++) {
@@ -842,23 +865,26 @@
                 datasets: []
             };
 
-            beginAtZero = false;
+            // Determine whether we want the y-axis to begin at zero
+            let beginAtZero = false;
+
             if (chartType === 'bar') {
+                beginAtZero = true;
                 chartData.datasets.push({
                     label: name,
                     data: [],
-                    backgroundColor: getRandomColor(),
-                    borderColor: getRandomColor(),
+                    backgroundColor: getRandomColor(0.8),
+                    borderColor: getRandomColor(1),
                     borderWidth: 1
                 });
             } else {
                 // line chart
-                beginAtZero = value_count > 0;
-                for (let i = 0; i < value_count; i++) {
+                beginAtZero = (valueCount > 1);
+                for (let i = 0; i < valueCount; i++) {
                     chartData.datasets.push({
-                        label: value_count > 1 ? name + ' ' + i : name,
+                        label: (valueCount > 1) ? name + ' ' + i : name,
                         data: [],
-                        borderColor: getRandomColor(i),
+                        borderColor: getRandomColor(0.8, i),
                         backgroundColor: 'rgba(0, 0, 0, 0)',
                         tension: 0
                     });
@@ -883,7 +909,7 @@
                         x: {
                             title: {
                                 display: true,
-                                text: chartType === 'bar' ? 'Bins' : 'Step'
+                                text: (chartType === 'bar' ? 'Bins' : 'Step')
                             },
                             ticks: {
                                 autoSkip: true
@@ -894,10 +920,10 @@
                             }
                         },
                         y: {
-                            // beginAtZero: beginAtZero,
+                            beginAtZero: beginAtZero,
                             title: {
                                 display: true,
-                                text: chartType === 'bar' ? 'Frequency' : 'Value'
+                                text: (chartType === 'bar' ? 'Frequency' : 'Value')
                             },
                             grid: {
                                 display: true,
@@ -908,7 +934,6 @@
                 }
             };
 
-            // Create the chart
             let chartInstance;
             try {
                 chartInstance = new Chart(canvas, config);
@@ -922,12 +947,6 @@
                 chart: chartInstance,
                 data: chartData
             };
-
-            // Add click event to open this chart in a modal if the chart isn't already modal
-            if (!config.options.is_modal) {
-                console.log(config);
-                chartContainer.addEventListener('click', () => openChartInModal(category, name));
-            }
         }
 
         /**
@@ -949,59 +968,15 @@
             }
         }
 
-        /**
-         * Open the selected chart in a larger modal view.
-         * Optionally re-fetch more data for it, if desired.
-         * @param {string} category
-         * @param {string} name
-         */
-        function openChartInModal(category, name) {
-            const modalOverlay = document.getElementById('modal-overlay');
-            const modalCanvas = document.getElementById('modal-chart');
-            if (!categories[category] || !categories[category].charts[name]) return;
-
-            // Destroy any existing modal chart instance
-            if (modalChartInstance) {
-                modalChartInstance.destroy();
-            }
-
-            // Show the modal
-            modalOverlay.style.display = 'flex';
-
-            // (Optional) Could fetch a bigger data window for just this chart here
-            // fetchMoreDataForChart(category, name).then(...)
-
-            // // Create a new Chart.js instance in the modal
-            // const originalChart = categories[category].charts[name].chart;
-            // const newConfig = JSON.parse(JSON.stringify(originalChart.config));
-            // // You can adjust newConfig if you'd like to show more data, etc.
-
-            // // Ensure the 'options.responsive' is true in the enlarged chart.
-            // if (!newConfig.options) newConfig.options = {};
-            // newConfig.options.is_modal = true;
-            // newConfig.options.responsive = true;
-            // newConfig.options.maintainAspectRatio = false;
-
-            // // Create the new chart in the modal
-            // modalChartInstance = new Chart(modalCanvas, newConfig);
-
-            // // put the data into the new chart
-            // const originalData = originalChart.data;
-            // modalChartInstance.data = JSON.parse(JSON.stringify(originalData));
-            // modalChartInstance.update();
-
-            modalChartInstance = new Chart(modalCanvas, categories[category].charts[name].chart.config);
-        }
 
         /**
-         * Utility function to generate a random color for chart lines.
+         * Utility function to generate random color variations for chart lines/bars.
          */
         function getRandomColor(index = 0) {
             // return variations of this 0,99,132 color based on index
             const baseColor = [0, 99, 132];
             return `rgba(${baseColor[0]}, ${baseColor[1] + index * 10}, ${baseColor[2] + index * 10}, 1)`;
         }
-
     </script>
 </body>
 </html>
