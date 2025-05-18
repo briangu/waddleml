@@ -484,8 +484,8 @@
                     return;
                 }
 
-                // Sort by updated_at descending to get the "most recent" project easily
-                projects.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                // Sort by timestamp descending to get the "most recent" project easily
+                projects.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                 const mostRecentProject = projects[0];
                 selectedProjectId = mostRecentProject.id;
 
@@ -671,6 +671,9 @@
          * @param {string} runId
          */
         async function fetchRunData(projectId, runId) {
+            // Prevent real-time updates until initial data is loaded
+            isInitialLoadComplete = false;
+
             // Grab date range from UI
             const startDate = document.getElementById('start-date-input').value;
             const endDate = document.getElementById('end-date-input').value;
@@ -694,18 +697,26 @@
                 const data = await response.json();
                 // console.log('Run data fetched:', data);
 
-                // If there's no data then update UI and return
+                // If there's no data then update UI but allow future updates
                 if (data.length === 0) {
                     const mainChartsContainer = document.getElementById('charts-container');
                     if (mainChartsContainer) {
                         mainChartsContainer.innerHTML = '<p>No data available for this run.</p>';
                     }
+                    isInitialLoadComplete = true;
                     return;
                 }
 
                 // Process each log entry
                 data.forEach(logEntry => {
-                    logEntry.data = JSON.parse(logEntry.data);
+                    if (typeof logEntry.data === 'string') {
+                        try {
+                            logEntry.data = JSON.parse(logEntry.data);
+                        } catch (err) {
+                            console.error('Failed to parse log entry data:', err);
+                            logEntry.data = {};
+                        }
+                    }
                     applyLogEntry(logEntry);
                 });
 
