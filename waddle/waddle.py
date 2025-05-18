@@ -9,6 +9,7 @@ import os
 import subprocess
 import threading
 import time
+import base64
 from datetime import datetime
 from pynvml import *
 from typing import Any, Dict, Optional
@@ -137,7 +138,7 @@ class WaddleLogger:
             elif isinstance(value, (list,dict)):
                 log_entry['value_json'] = json.dumps(value)
             elif isinstance(value, bytes):
-                log_entry['value_blob'] = value.encode('base64')
+                log_entry['value_blob'] = base64.b64encode(value).decode('ascii')
             else:
                 log_entry['value_string'] = str(value)
             # Write to local folder
