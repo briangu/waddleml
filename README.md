@@ -126,4 +126,11 @@ run.finish()
 
 3. Visualize the results.
 
-TBD
+Start the local server pointing it at your log directory:
+
+```bash
+python -m waddle.server --log-root .waddle/logs
+```
+
+Open your browser to `http://localhost:8000` and the dashboard will display the
+"hello-world" project with its logged metrics.
