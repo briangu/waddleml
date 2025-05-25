@@ -89,7 +89,8 @@ class WaddleLogger:
         Reads and returns the content of the running script.
         """
         try:
-            with open(__file__, 'r') as f:
+            script_path = sys.argv[0]
+            with open(script_path, 'r') as f:
                 return f.read().encode('utf-8')  # Encode to binary for storage
         except Exception as e:
             print(f"Could not read the script: {e}")

@@ -1,10 +1,8 @@
 import argparse
 import asyncio
-import glob
 import json
 import os
 import logging
-import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -17,6 +15,8 @@ from fastapi.templating import Jinja2Templates
 import pandas as pd
 from datetime import datetime
 from functools import lru_cache
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 import websockets.legacy
 import websockets.legacy.client
@@ -72,6 +72,23 @@ class ConnectionManager:
                 self.disconnect(connection)
 
 manager = ConnectionManager()
+
+class LogFileEventHandler(FileSystemEventHandler):
+    def __init__(self, server: 'WaddleServer'):
+        super().__init__()
+        self.server = server
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        if event.src_path.endswith('.json'):
+            try:
+                with open(event.src_path, 'r') as f:
+                    log_entry = json.load(f)
+                    self.server._ingest_log_entry(log_entry)
+                os.remove(event.src_path)
+            except Exception as e:
+                logger.error(f"Error processing log file {event.src_path}: {e}")
 
 class WaddleServer:
     def __init__(self, db_root, log_root=None, loop=None, peers=None, watch_delay=10):
@@ -130,7 +147,7 @@ class WaddleServer:
         ''')
 
     async def start(self):
-        # Start log watching
+        # Start log watching using watchdog
         self.watch_task = asyncio.create_task(self.watch_for_logs())
 
         # Start peer synchronization
@@ -149,31 +166,20 @@ class WaddleServer:
         await asyncio.gather(*self.peer_tasks, return_exceptions=True)
 
     async def watch_for_logs(self):
-        while self.watching_logs:
-            logger.info(f"{time.time()} Watching folder for logs...")
+        if not self.watching_logs:
+            return
 
-            # Get all directories recursively
-            log_folders = glob.glob(os.path.join(self.log_root, '**'), recursive=True)
-            log_folders = [f for f in log_folders if os.path.isdir(f)]
+        event_handler = LogFileEventHandler(self)
+        observer = Observer()
+        observer.schedule(event_handler, self.log_root, recursive=True)
+        observer.start()
 
-            for log_folder in log_folders:
-                logger.info(f"Processing log folder: {log_folder}")
-
-                # Process log entries recursively
-                log_files = glob.glob(os.path.join(log_folder, '**', '*.json'), recursive=True)
-                for log_file in log_files:
-                    try:
-                        logging.info(f"Processing log file: {log_file}")
-                        with open(log_file, 'r') as f:
-                            log_entry = json.load(f)
-                            # Ingest log entry
-                            self._ingest_log_entry(log_entry)
-                        # Delete the log file after processing
-                        os.remove(log_file)
-                    except Exception as e:
-                        logger.error(f"Error processing log file {log_file}: {e}")
-
-            await asyncio.sleep(self.watch_delay)
+        try:
+            while self.watching_logs:
+                await asyncio.sleep(self.watch_delay)
+        finally:
+            observer.stop()
+            observer.join()
 
     def _insert_project_info(self, project_info):
         self.con.execute("SELECT id FROM project_info WHERE name = ?", (project_info['name'],))

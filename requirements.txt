@@ -6,3 +6,4 @@ requests==2.32.3
 rich==13.8.1
 uvicorn==0.30.6
 websockets==13.0.1
+watchdog==4.0.0
