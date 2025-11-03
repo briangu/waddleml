@@ -53,10 +53,6 @@ This writes `waddle.json`, ensures `.waddle/` exists, and appends the necessary 
 
 ### Log and stream a training script
 ```bash
-# Start the dashboard (HTTP + WebSocket)
-waddle serve --host 127.0.0.1 --port 8080 --ws 8081
-
-# In another terminal, run an entry point from the linked repo
 waddle run \
   --repo main \
   --entry examples.ml_sample \
@@ -68,10 +64,10 @@ waddle run \
 ```
 
 - `--entry` accepts `module` or `module:callable`. If the callable is omitted, Waddle looks for `waddle_main(run, argv)` inside the module.
-- `--http` and `--ws` spin up ephemeral dashboard endpoints so you can watch the run live without starting a standalone server.
+- `--http` and `--ws` spin up a local dashboard for the lifetime of the run, so a single command handles logging and live visualization. Visit `http://127.0.0.1:8080` while the job is running to inspect metrics and metadata as they stream in.
 - Waddle automatically creates a commit before execution. Opt out with `--no-auto-commit` to run against the current workspace snapshot.
 
-Once the run finishes, visit `http://127.0.0.1:8080` to browse metrics and run metadata. All captured data is stored under `.waddle/`.
+Need the dashboard up persistently (for multiple runs or passive viewing)? Launch it once with `waddle serve --host 127.0.0.1 --port 8080 --ws 8081`, then point subsequent `waddle run` invocations at the same `--http/--ws` ports.
 
 ### Programmatic instrumentation
 
