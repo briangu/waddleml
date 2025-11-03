@@ -1,31 +1,39 @@
-import os
-from setuptools import setup, find_packages
+from pathlib import Path
 
-directory = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(directory, 'README.md'), encoding='utf-8') as f:
-  long_description = f.read()
+from setuptools import find_packages, setup
 
-# use the requirements.txt to install dependencies
-with open(os.path.join(directory, 'requirements.txt')) as f:
-    required_packages = f.read().splitlines()
+
+ROOT = Path(__file__).parent
+README_PATH = ROOT / "README.md"
+
+if README_PATH.exists():
+    long_description = README_PATH.read_text(encoding="utf-8")
+    long_description_content_type = "text/markdown"
+else:
+    long_description = "Lightweight experiment tracker with git-native snapshots and a local dashboard."
+    long_description_content_type = "text/plain"
 
 setup(
-    name='waddleml',
-    packages=find_packages(),
-    version='0.1.3',
-    description='WaddleML is a machine learning stats tracker built on DuckDB',
-    author='Brian Guarraci',
-    license='MIT',
+    name="waddle",
+    version="0.1.0",
+    description="Lightweight run logger with git snapshots and a local dashboard.",
     long_description=long_description,
-    long_description_content_type='text/markdown',
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License"
-    ],
-    install_requires=required_packages,
-    python_requires='<=3.12,>=3.8',
+    long_description_content_type=long_description_content_type,
+    author="Waddle contributors",
+    python_requires=">=3.8",
+    packages=find_packages(include=["waddle", "waddle.*"]),
     include_package_data=True,
-    zip_safe=False,
-    test_suite='tests',
-    scripts=['scripts/waddle']
+    package_data={"waddle": ["static/*"]},
+    entry_points={"console_scripts": ["waddle=waddle.waddle_cli:main"]},
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Topic :: Software Development :: Build Tools",
+    ],
 )

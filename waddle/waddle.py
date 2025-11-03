@@ -1,224 +1,255 @@
-# waddle_logger.py
 
-import psutil
-import platform
-import argparse
-import json
-import sys
-import os
-import subprocess
-import threading
-import time
-import base64
-from datetime import datetime
-from pynvml import *
-from typing import Any, Dict, Optional
-import uuid
+from __future__ import annotations
+import os, json, sqlite3, time, uuid, subprocess, sys, base64, hashlib, tempfile, shutil
+from dataclasses import dataclass
+from typing import Optional, Any, Dict, List
+from pathlib import Path
 
-class WaddleLogger:
-    def __init__(self, log_root, project, name=None, config=None, use_gpu_metrics=True):
-        self.log_root = log_root
-        self.project = project
-        self.name = name or datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.id = f"{self.project}_{self.name}"
-        self.log_path = os.path.join(log_root, "logs")
-        os.makedirs(self.log_path, exist_ok=True)
-        self.config: argparse.Namespace = config
-        self.use_gpu_metrics = use_gpu_metrics
+def _now() -> float: return time.time()
 
-        # Log initial system, CLI parameters, and code
-        self.log_run_info()
+def _ensure_dir(path: str):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
-    def _get_file_prefix(self):
-        return f"{int(time.time() * 1000)}_{uuid.uuid4().hex}"
+@dataclass
+class RepoInfo:
+    id: str
+    name: str
+    path: str
+    origin_url: Optional[str]
+    default_branch: str
 
-    def log_run_info(self):
-        # Get system information
-        python_version = sys.version
-        os_info = platform.platform()
-        cpu_info = platform.processor()
-        total_memory = psutil.virtual_memory().total / (1024 ** 3)  # Convert to GB
+class WaddleDB:
+    def __init__(self, path: str):
+        self.path = os.path.abspath(path)
+        _ensure_dir(self.path)
+        self._conn = sqlite3.connect(self.path)
+        self._conn.row_factory = sqlite3.Row
+        self._init()
 
-        # Retrieve Git commit hash if available
-        git_hash = self.get_git_commit_hash()
+    def _init(self):
+        c = self._conn.cursor()
+        c.execute("PRAGMA foreign_keys=ON;")
+        c.executescript("""
+        CREATE TABLE IF NOT EXISTS projects(
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS repos(
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            path TEXT NOT NULL,
+            origin_url TEXT,
+            default_branch TEXT,
+            created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS commits(
+            repo_id TEXT NOT NULL,
+            commit_sha TEXT NOT NULL,
+            tree_sha TEXT,
+            author TEXT,
+            author_time REAL,
+            message TEXT,
+            PRIMARY KEY(repo_id, commit_sha),
+            FOREIGN KEY(repo_id) REFERENCES repos(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS runs(
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            repo_id TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+            commit_sha TEXT NOT NULL,
+            entry TEXT NOT NULL,
+            name TEXT,
+            status TEXT NOT NULL DEFAULT 'running',
+            started_at REAL NOT NULL,
+            ended_at REAL,
+            env_json TEXT,
+            notes TEXT,
+            FOREIGN KEY(repo_id, commit_sha) REFERENCES commits(repo_id, commit_sha) ON DELETE RESTRICT
+        );
+        CREATE TABLE IF NOT EXISTS params(
+            run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            PRIMARY KEY(run_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS tags(
+            run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            PRIMARY KEY(run_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS metrics(
+            rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+            step INTEGER NOT NULL,
+            ts REAL NOT NULL,
+            key TEXT NOT NULL,
+            value REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS artifacts(
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            uri TEXT,
+            sha256 TEXT,
+            inline_bytes BLOB
+        );
+        CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
+        CREATE INDEX IF NOT EXISTS idx_metrics_run_key_step ON metrics(run_id, key, step);
+        """)
+        self._conn.commit()
 
-        # Read the running script (if accessible)
-        code_data = self.get_running_script_code()
+    # ---------------- Projects / Repos ----------------
+    def _get_or_create_project(self, name: str) -> str:
+        c = self._conn.cursor()
+        r = c.execute("SELECT id FROM projects WHERE name=?", (name,)).fetchone()
+        if r: return r["id"]
+        pid = uuid.uuid4().hex
+        c.execute("INSERT INTO projects(id, name, created_at) VALUES(?,?,?)", (pid, name, _now()))
+        self._conn.commit()
+        return pid
 
-        # Prepare the CLI parameters as JSON
-        cli_params_json = json.dumps(sys.argv)
+    def upsert_repo(self, name: str, path: str, origin_url: Optional[str], default_branch: str = "main") -> RepoInfo:
+        c = self._conn.cursor()
+        r = c.execute("SELECT id FROM repos WHERE name=?", (name,)).fetchone()
+        rid = r["id"] if r else uuid.uuid4().hex
+        c.execute("""INSERT OR REPLACE INTO repos(id, name, path, origin_url, default_branch, created_at)
+                     VALUES(?,?,?,?,?,COALESCE((SELECT created_at FROM repos WHERE id=?), ?))""",
+                  (rid, name, os.path.abspath(path), origin_url, default_branch, rid, _now()))
+        self._conn.commit()
+        return RepoInfo(rid, name, os.path.abspath(path), origin_url, default_branch)
 
-        # Prepare the GPU info
-        gpu_info = json.dumps(self.get_gpu_system_metrics())
+    def get_repo(self, name: str) -> RepoInfo:
+        c = self._conn.cursor()
+        r = c.execute("SELECT * FROM repos WHERE name=?", (name,)).fetchone()
+        if not r: raise KeyError(f"repo not found: {name}")
+        return RepoInfo(r["id"], r["name"], r["path"], r["origin_url"], r["default_branch"] or "main")
 
-        # Prepare the run info dictionary
-        run_info = {
-            "run_info": {
-                'project': self.project,
-                'name': self.name,
-                'start_time': datetime.now().isoformat(),
-                'cli_params': cli_params_json,
-                'python_version': python_version,
-                'os_info': os_info,
-                'cpu_info': cpu_info,
-                'total_memory': total_memory,
-                'gpu_info': gpu_info,
-                'code': code_data.decode('utf-8'),
-                'git_hash': git_hash,
-                'timestamp': datetime.now().isoformat()
-            }
-        }
+    # ---------------- Git helpers ----------------
+    @staticmethod
+    def _sh(repo_path: str, *args: str) -> str:
+        res = subprocess.run(["git", *args], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {res.stderr.strip()}")
+        return res.stdout
 
-        # Write run_info to a file in the log folder
-        run_info_file = os.path.join(self.log_path, f'{self._get_file_prefix()}.run_info.json')
-        with open(run_info_file, 'w') as f:
-            json.dump(run_info, f)
+    @staticmethod
+    def _dirty(repo_path: str) -> bool:
+        out = WaddleDB._sh(repo_path, "status", "--porcelain=v1").strip()
+        return len(out) > 0
 
-    def get_git_commit_hash(self):
-        """
-        Retrieves the current Git commit hash if the script is in a Git repository.
-        """
-        try:
-            git_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip().decode()
-        except Exception:
-            git_hash = None
-        return git_hash
-
-    def get_running_script_code(self):
-        """
-        Reads and returns the content of the running script.
-        """
-        try:
-            with open(__file__, 'r') as f:
-                return f.read().encode('utf-8')  # Encode to binary for storage
-        except Exception as e:
-            print(f"Could not read the script: {e}")
-            return b''  # Return an empty byte if reading fails
-
-    def get_gpu_system_metrics(self):
-        """
-        Collects system information about GPU utilization, temperature, etc.
-        """
-        gpu_metrics = []
-        if self.use_gpu_metrics:
+    def ensure_commit(self, repo: RepoInfo, auto_commit: bool = True, message: Optional[str] = None) -> str:
+        if auto_commit and self._dirty(repo.path):
+            self._sh(repo.path, "add", "-A")
+            msg = message or f"waddle: auto snapshot {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            self._sh(repo.path, "commit", "-m", msg)
+        sha = self._sh(repo.path, "rev-parse", "HEAD").strip()
+        # record commit metadata if missing
+        c = self._conn.cursor()
+        row = c.execute("SELECT 1 FROM commits WHERE repo_id=? AND commit_sha=?", (repo.id, sha)).fetchone()
+        if not row:
             try:
-                gpu_count = nvmlDeviceGetCount()
-                for i in range(gpu_count):
-                    handle = nvmlDeviceGetHandleByIndex(i)
-                    gpu_metrics.append({
-                        'gpu_index': i,
-                        'name': nvmlDeviceGetName(handle),
-                        'temperature': nvmlDeviceGetTemperature(handle, NVML_TEMPERATURE_GPU),
-                        'memory_used': nvmlDeviceGetMemoryInfo(handle).used / (1024 ** 3),  # GB
-                        'memory_total': nvmlDeviceGetMemoryInfo(handle).total / (1024 ** 3),  # GB
-                        'utilization': nvmlDeviceGetUtilizationRates(handle).gpu
-                    })
-            except Exception as e:
-                print(f"Error getting GPU metrics: {e}")
-        return gpu_metrics
+                msg = self._sh(repo.path, "log", "-1", "--pretty=%s", sha).strip()
+                author = self._sh(repo.path, "log", "-1", "--pretty=%an", sha).strip()
+                when = self._sh(repo.path, "log", "-1", "--pretty=%ct", sha).strip()
+                tree = self._sh(repo.path, "rev-parse", f"{sha}^{{tree}}").strip()
+                when_ts = float(when) if when else None
+            except Exception:
+                msg = None; author = None; when_ts = None; tree = None
+            c.execute("""INSERT OR IGNORE INTO commits(repo_id, commit_sha, tree_sha, author, author_time, message)
+                         VALUES(?,?,?,?,?,?)""", (repo.id, sha, tree, author, when_ts, msg))
+            self._conn.commit()
+        return sha
 
-    def log(self, data: Dict[str, Any], step: Optional[int], category='default', timestamp=None):
-        """
-        Writes log entries as JSON files to the log folder (solo mode) or sends via REST API (distributed mode).
-        """
-        timestamp = timestamp or datetime.now().isoformat()
-        for name, value in data.items():
-            log_entry = {
-                'run': self.name,
-                'project': self.project,
-                'step': step or 0,
-                'category': category,
-                'name': name,
-                'timestamp': timestamp
-            }
-            if isinstance(value, (int, float)):
-                log_entry['value_double'] = value
-            elif isinstance(value, bool):
-                log_entry['value_bool'] = value
-            elif isinstance(value, (list,dict)):
-                log_entry['value_json'] = json.dumps(value)
-            elif isinstance(value, bytes):
-                log_entry['value_blob'] = base64.b64encode(value).decode('ascii')
+    # ---------------- Run context ----------------
+    class Run:
+        def __init__(self, conn: sqlite3.Connection, run_id: str):
+            self._conn = conn; self.run_id = run_id
+        def _update_status(self, status: str):
+            c = self._conn.cursor()
+            if status in ("completed","failed","aborted"):
+                c.execute("UPDATE runs SET status=?, ended_at=? WHERE id=?", (status, time.time(), self.run_id))
             else:
-                log_entry['value_string'] = str(value)
-            # Write to local folder
-            filename = f"{self._get_file_prefix()}.json"
-            temp_filename = f"{filename}.tmp"
-            filepath = os.path.join(self.log_path, temp_filename)
-            # Write to a temporary file
-            with open(filepath, 'w') as f:
-                json.dump(log_entry, f)
-            # Rename to the final filename to ensure atomicity
-            final_filepath = os.path.join(self.log_path, filename)
-            os.rename(filepath, final_filepath)
+                c.execute("UPDATE runs SET status=? WHERE id=?", (status, self.run_id))
+            self._conn.commit()
+        # logging
+        def log_param(self, key: str, value: Any):
+            c = self._conn.cursor()
+            c.execute("INSERT OR REPLACE INTO params(run_id, key, value) VALUES(?,?,?)",
+                      (self.run_id, key, json.dumps(value, ensure_ascii=False)))
+            self._conn.commit()
+        def log_tag(self, key: str, value: Any):
+            c = self._conn.cursor()
+            c.execute("INSERT OR REPLACE INTO tags(run_id, key, value) VALUES(?,?,?)",
+                      (self.run_id, key, json.dumps(value, ensure_ascii=False)))
+            self._conn.commit()
+        def log_metric(self, key: str, step: int, value: float, ts: Optional[float] = None):
+            if ts is None: ts = time.time()
+            c = self._conn.cursor()
+            c.execute("INSERT INTO metrics(run_id, step, ts, key, value) VALUES(?,?,?,?,?)",
+                      (self.run_id, step, ts, key, float(value)))
+            self._conn.commit()
+        def log_artifact(self, name: str, path: Optional[str] = None, kind: str = "file", inline: bool = False):
+            c = self._conn.cursor()
+            aid = uuid.uuid4().hex; created = time.time()
+            uri=None; blob=None; sha=None
+            if path:
+                uri = os.path.abspath(path)
+                with open(path,"rb") as f: sha = hashlib.sha256(f.read()).hexdigest()
+                if inline:
+                    with open(path,"rb") as f: blob = f.read()
+            else:
+                sha = hashlib.sha256(b"").hexdigest()
+            c.execute("""INSERT INTO artifacts(id, run_id, name, kind, created_at, uri, sha256, inline_bytes)
+                         VALUES(?,?,?,?,?,?,?,?)""",
+                      (aid, self.run_id, name, kind, created, uri, sha, blob))
+            self._conn.commit(); return aid
 
-    def log_gpu_metrics_periodically(self, interval=60):
-        """
-        Periodically logs GPU system metrics every `interval` seconds in a separate thread.
-        """
-        def log_metrics():
-            while True:
-                gpu_metrics_list = self.get_gpu_system_metrics()
-                for metric in gpu_metrics_list:
-                    data = {}
-                    for key, value in metric.items():
-                        if key != 'gpu_index' and key != 'name':  # Skip index and name in logs
-                            data[f'gpu_{metric["gpu_index"]}_{key}'] = value
-                    self.log(data=data, step=None, category='gpu_system', timestamp=datetime.now().isoformat())
-                time.sleep(interval)
+    def run(self, project: str, repo: RepoInfo, commit_sha: str, entry: str,
+            name: Optional[str] = None, env: Optional[Dict[str, Any]] = None, notes: Optional[str] = None):
+        c = self._conn.cursor()
+        r = c.execute("SELECT 1 FROM commits WHERE repo_id=? AND commit_sha=?", (repo.id, commit_sha)).fetchone()
+        if not r:
+            c.execute("INSERT OR IGNORE INTO commits(repo_id, commit_sha) VALUES(?,?)", (repo.id, commit_sha))
+        pid = self._get_or_create_project(project)
+        rid = uuid.uuid4().hex
+        c.execute("""INSERT INTO runs(id, project_id, repo_id, commit_sha, entry, name, status, started_at, env_json, notes)
+                     VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                  (rid, pid, repo.id, commit_sha, entry, name, "running", _now(), json.dumps(env or {}, ensure_ascii=False, sort_keys=True), notes))
+        self._conn.commit()
+        run = WaddleDB.Run(self._conn, rid)
+        class _Ctx:
+            def __enter__(self): return run
+            def __exit__(self, exc_type, exc, tb):
+                run._update_status("failed" if exc else "completed")
+        return _Ctx()
 
-        # Create and start a thread for logging GPU metrics
-        logging_thread = threading.Thread(target=log_metrics, daemon=True)
-        logging_thread.start()
-
-# Global variables and functions
-config: argparse.Namespace = argparse.Namespace()
-run: WaddleLogger = None
-server_process: Optional[subprocess.Popen] = None
-
-def _assign_config(app_config):
-    global config
-    config = app_config
-
-def init(project, log_root='.waddle/logs', config=None, use_gpu_metrics=True, gpu_metrics_interval=60):
-    global run
-    global server_process
-
-    os.makedirs(log_root, exist_ok=True)
-
-    # Assign the passed config to the global config
-    config = config or argparse.Namespace()
-    _assign_config(config)
-
-    if use_gpu_metrics:
-        # Check if the pynvml package is available
+def execute_commit(repo_path: str, commit_sha: str, entry: str, argv: Optional[List[str]] = None, run_obj: Optional[WaddleDB.Run] = None):
+    import importlib, types
+    tmp = tempfile.mkdtemp(prefix="waddle_wt_")
+    try:
+        subprocess.run(["git", "worktree", "add", "--detach", tmp, commit_sha], cwd=repo_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        sys.path.insert(0, tmp)
+        if ":" in entry: mod_name, func_name = entry.split(":",1)
+        else: mod_name, func_name = entry, None
+        mod = importlib.import_module(mod_name)
+        fn = getattr(mod, func_name) if func_name else getattr(mod, "waddle_main", None)
+        if fn is None or not callable(fn):
+            raise RuntimeError(f"No runnable entry found for {entry}. Provide 'module:func' or export 'waddle_main'.")
         try:
-            nvmlInit()
-        except Exception as e:
-            print(f"Could not initialize NVML: {e}")
-            use_gpu_metrics = False
-
-    run = WaddleLogger(log_root=log_root, project=project, use_gpu_metrics=use_gpu_metrics, config=config)
-
-    print("Waddle Logger initialized.")
-    print("Run ID:", run.id)
-
-    if use_gpu_metrics and gpu_metrics_interval > 0:
-        run.log_gpu_metrics_periodically(interval=gpu_metrics_interval)
-
-    return run
-
-def finish():
-    global server_process
-    if server_process is not None:
-        server_process.terminate()
-        server_process.wait()
-        server_process = None
-
-def log(category, data, step, timestamp=None):
-    if run is None:
-        raise ValueError("WaddleLogger is not initialized. Please call `init()` first.")
-    if not isinstance(data, dict):
-        raise ValueError("The data must be a dictionary.")
-    run.log(data=data, step=step, category=category, timestamp=timestamp)
-
+            fn(run_obj, argv or [])
+        except TypeError:
+            fn(run_obj)
+    finally:
+        try:
+            sys.path.remove(tmp)
+        except Exception:
+            pass
+        try:
+            subprocess.run(["git", "worktree", "remove", "--force", tmp], cwd=repo_path, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception:
+            pass
+        shutil.rmtree(tmp, ignore_errors=True)
