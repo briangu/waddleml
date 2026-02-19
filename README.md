@@ -1,132 +1,236 @@
-# Waddle
+# WaddleML
 
-Lightweight, git-native experiment logging with a local dashboard that you can run on any machine without external services. Waddle captures metrics, parameters, tags, and artifacts for each run, storing everything in a small SQLite database that mirrors the exact commit that produced the results.
+A lightweight ML experiment tracker with a local dashboard. Think **local Weights & Biases** — no cloud, no account, no config, no git required. Just `pip install` and start logging.
+
+```python
+import waddle
+
+with waddle.init(project="my-project", config={"lr": 0.01, "epochs": 100}):
+    for epoch in range(100):
+        loss = train_one_epoch()
+        waddle.log({"loss": loss, "acc": accuracy})
+```
+
+Then view everything:
+
+```bash
+waddle serve
+# open http://127.0.0.1:8080
+```
 
 ## Features
-- Git-aware snapshots: auto-commit (or workspace fallback) before every run to guarantee reproducibility.
-- Local storage: runs, metrics, and artifacts live in `.waddle/` via SQLite and the filesystem—no cloud dependency.
-- Live dashboard: pure HTML/JS frontend served with the `waddle` CLI, plus optional WebSocket streaming for real-time charts.
-- Simple Python API: use `run.log_metric`, `run.log_param`, `run.log_tag`, and `run.log_artifact` inside your training scripts.
-- Remote sync hooks: `waddle push` / `waddle pull` ship run data to a custom HTTP endpoint when you're ready to share.
 
-## Repository Layout
+- **Wandb-style API** — `waddle.init()`, `waddle.log()`, `waddle.finish()` with auto-incrementing steps, context manager, and atexit handler.
+- **Works anywhere** — no git required. Use in Jupyter, Colab, Docker, or plain scripts. If you happen to be in a git repo, waddle auto-captures the commit as a bonus.
+- **DuckDB storage** — fast, single-file database in `.waddle/waddle.duckdb`. No server process needed.
+- **System metrics** — optional background thread captures CPU, memory, and GPU utilization.
+- **Rich dashboard** — Plotly.js charts, sortable run table, per-run tabs, and multi-run comparison.
+- **Three-command CLI** — `waddle init`, `waddle ls`, `waddle serve`. That's it.
 
-```
-waddleml/
-├── waddle/             # Package code and CLI entry point
-│   ├── waddle.py       # Core DB + execution helpers
-│   ├── waddle_cli.py   # `waddle` console script (init/run/serve/push/pull)
-│   └── static/         # Dashboard assets (HTML, JS, CSS)
-├── examples/           # Sample jobs to exercise logging
-├── tests/              # Unit tests (run with `python -m unittest discover tests`)
-├── setup.py            # Package metadata (`entry_points={"console_scripts": ["waddle=..."]}`)
-└── README.md           # You are here
-```
+## Quick Start
 
-Runtime artifacts such as `.waddle/waddle.sqlite`, `.waddle/logs/`, and temporary worktrees are generated on demand and should remain untracked.
+### 1. Install
 
-## Getting Started
-
-### 1. Create a virtual environment
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 2. Install dependencies in editable mode
-```bash
-pip install -r requirements.txt
 pip install -e .
 ```
 
-Python 3.8–3.12 is supported.
-
-### 3. Initialize Waddle in your project
-```bash
-waddle init                  # or `python -m waddle.waddle_cli init`
-waddle repo-link --name main --path /path/to/your/repo
-```
-
-This writes `waddle.json`, ensures `.waddle/` exists, and appends the necessary ignore rules to `.gitignore`.
-
-## Running Jobs
-
-### Log and stream a training script
-```bash
-waddle run \
-  --repo main \
-  --entry examples.ml_sample \
-  --project demo \
-  --name "linear-regression" \
-  --http 8080 \
-  --ws 8081 \
-  -- --epochs 40 --learning-rate 0.03
-```
-
-- `--entry` accepts `module` or `module:callable`. If the callable is omitted, Waddle looks for `waddle_main(run, argv)` inside the module.
-- `--http` and `--ws` spin up a local dashboard for the lifetime of the run, so a single command handles logging and live visualization. Visit `http://127.0.0.1:8080` while the job is running to inspect metrics and metadata as they stream in.
-- Waddle automatically creates a commit before execution. Opt out with `--no-auto-commit` to run against the current workspace snapshot.
-
-Need the dashboard up persistently (for multiple runs or passive viewing)? Launch it once with `waddle serve --host 127.0.0.1 --port 8080 --ws 8081`, then point subsequent `waddle run` invocations at the same `--http/--ws` ports.
-
-### Programmatic instrumentation
-
-Inside your script you receive a `run` object that exposes the logging API:
+### 2. Instrument your training script
 
 ```python
-def waddle_main(run, argv):
-    # Log configuration
-    run.log_param("epochs", 40)
-    run.log_tag("model", "linear_regression")
+import waddle
 
-    # Training loop
-    for step, loss in enumerate(train()):
-        run.log_metric("loss", step, loss)
+with waddle.init(
+    project="cifar10",
+    name="resnet-baseline",
+    config={"lr": 0.001, "batch_size": 64, "epochs": 50},
+    tags={"model": "resnet18"},
+):
+    for epoch in range(50):
+        loss, acc = train_epoch()
+        waddle.log({"loss": loss, "acc": acc})
 
-    # Persist an artifact
-    run.log_artifact("weights.json", "./weights.json", kind="model", inline=True)
+    waddle.log_artifact("model.pt", "checkpoints/best.pt", kind="model")
 ```
 
-If you call the module directly (outside of Waddle) you can pass `None` for `run` in your own entry point to keep the function reusable.
+### 3. View results
 
-## Dashboard and API
+```bash
+waddle ls              # quick look in the terminal
+waddle serve           # full dashboard at http://127.0.0.1:8080
+```
 
-The dashboard is a vanilla HTML+Canvas app bundled in `waddle/static/`. When the server is running you get:
-- `GET /` – main UI
-- `GET /api/runs` – list of runs (`[{id, name, status, started_at, ended_at, commit_sha, entry}]`)
-- `GET /api/runs/<id>` – detailed run metadata, params, tags, artifacts
-- `GET /api/runs/<id>/metrics?key=<metric>&limit=2000` – paginated metric samples
-- `WS ws://<host>:<port>` – optional WebSocket stream for live updates (`type: metric|param|tag|status`)
+## Python API
 
-You can point external tooling at these endpoints for custom dashboards or automation.
+### `waddle.init(...) -> Run`
 
-## Remote Sync (optional)
+Start a new run. If inside a git repo, auto-captures the commit. If not, works fine without it.
 
-Configure a remote collector in `waddle.json` and use:
-- `waddle push` – upload the current `.waddle/` database and referenced artifacts to a remote HTTP endpoint.
-- `waddle pull` – fetch run history from the remote into your local store.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `project` | `str` | `"default"` | Project name (groups runs) |
+| `name` | `str` | `None` | Human-readable run name |
+| `config` | `dict` | `None` | Hyperparameters — auto-logged as params |
+| `tags` | `dict` | `None` | Categorical labels |
+| `system_metrics` | `bool` | `True` | Collect CPU/mem/GPU in background |
+| `db_path` | `str` | `None` | Override DuckDB path |
 
-The default configuration ships with placeholders; populate `remote.url` and `remote.token` if you implement a server.
+Returns a `Run` that works as a context manager.
+
+### `waddle.log(metrics, step=None)`
+
+Log a dictionary of metrics. Step auto-increments if omitted.
+
+```python
+waddle.log({"loss": 0.5, "acc": 0.9})        # step 0
+waddle.log({"loss": 0.3, "acc": 0.95})       # step 1
+waddle.log({"loss": 0.1}, step=100)           # explicit step
+```
+
+### `waddle.log_param(key, value)` / `waddle.log_tag(key, value)`
+
+Log individual parameters or tags after init.
+
+### `waddle.log_artifact(name, path, kind, inline)`
+
+Log an output file. `inline=True` stores contents in DuckDB.
+
+### `waddle.finish()`
+
+End the active run. Called automatically with `with waddle.init(...)` or at process exit.
+
+## CLI
+
+```
+waddle init [--path PATH]                 # create .waddle/ and .gitignore entry
+waddle ls [-n 20] [--db PATH]            # list recent runs in terminal
+waddle serve [--host HOST] [--port PORT]  # start dashboard
+```
+
+### `waddle ls`
+
+```
+$ waddle ls
+      ID  Project          Name                  Status     Duration   Commit
+-------------------------------------------------------------------------------------
+a1b2c3d4  hp-sweep         lr=0.1                completed       0.2s  f3e2d1a0
+e5f6a7b8  hp-sweep         lr=0.05               completed       0.2s  f3e2d1a0
+c9d0e1f2  quickstart       c9d0e1f2              completed       0.1s
+```
+
+Runs without git show no commit — that's fine.
 
 ## Examples
 
-- `python -m examples.ml_sample --epochs 50` – run the toy regression script without logging.
-- `waddle run --repo main --entry examples.ml_sample -- --epochs 50` – same script but instrumented, with metrics and artifacts recorded automatically.
+Four examples, from minimal to full-featured:
 
-Use these as templates for your own training jobs or ingestion pipelines.
+### 1. Quickstart — minimal
 
-## Development Workflow
+```bash
+python examples/quickstart.py
+```
 
-- Format/type check: keep code PEP 8 compliant and add concise comments where logic is non-obvious.
-- Tests: run `python -m unittest discover tests` before submitting changes. Tests rely on temporary directories and leave no files behind.
-- Packaging: `setup.py` exposes the `waddle` console script via `entry_points`; ensure this README stays up to date when adding new CLI flags or environment variables.
+20 lines. Shows `init`, `log`, `log_param`, `log_tag`.
 
-## Troubleshooting
+### 2. Linear Regression — full instrumentation
 
-- **Git auto-commit fails**: Waddle falls back to a workspace snapshot. You can keep the snapshot by checking the run tag `waddle_workspace_snapshot` or enable `--no-auto-commit` to skip commit attempts entirely.
-- **Dashboard shows no data**: Verify the run pointed at the correct database (`waddle.json` → `db` path) and that you're serving the same file the run wrote to.
-- **Missing repository link**: Re-run `waddle repo-link --name <name> --path <git root>`; each linked repo is stored in the SQLite registry.
+```bash
+python examples/linear_regression.py --epochs 100 --lr 0.03
+```
+
+Per-epoch metrics, evaluation, model artifact.
+
+### 3. Hyperparameter Sweep — compare runs
+
+```bash
+python examples/hyperparameter_sweep.py
+waddle serve  # select runs → "Compare Selected"
+```
+
+4 runs with different learning rates. Compare overlaid loss curves and parameter diffs.
+
+### 4. Classification — different model type
+
+```bash
+python examples/classification.py --epochs 200
+```
+
+Binary classification with a perceptron. Loss, accuracy, learned parameters.
+
+## Dashboard
+
+The dashboard at `http://localhost:8080` provides:
+
+- **Run table** — sortable, filterable, multi-select for comparison
+- **Single run view** — tabs: Overview (params/tags/env/git), Metrics (Plotly charts), System (CPU/mem/GPU), Artifacts
+- **Run comparison** — overlaid metric traces + parameter diff table
+- **Live updates** — WebSocket auto-reconnect
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/runs` | GET | List runs (`?project=`, `?status=`, `?sort=`, `?limit=`) |
+| `/api/runs/{id}` | GET | Run detail + params + tags + artifacts + metric keys |
+| `/api/runs/{id}/metrics` | GET | Metric time series (`?key=`, `?limit=`) |
+| `/api/runs/{id}` | DELETE | Delete a run |
+| `/api/compare` | POST | Compare runs (`{"run_ids": [...]}`) |
+| `/ws` | WS | Live metric streaming |
+
+## Git Integration (Optional)
+
+When you run `waddle.init()` inside a git repository:
+- Auto-commits dirty working tree before the run
+- Captures the commit SHA and links it to the run
+- Records commit metadata (author, message, tree)
+- Shows commit info in the dashboard
+
+When not in a git repo, everything works the same — you just don't get commit tracking.
+
+## System Metrics
+
+When `system_metrics=True` (default), a background thread samples every 5s:
+
+| Metric | Source |
+|--------|--------|
+| `system/cpu_percent` | psutil |
+| `system/memory_percent` | psutil |
+| `system/memory_used_gb` | psutil |
+| `system/gpu0_util_percent` | pynvml |
+| `system/gpu0_memory_used_gb` | pynvml |
+| `system/gpu0_temp_c` | pynvml |
+
+Missing deps are silently skipped.
+
+## Dependencies
+
+**Required:** `duckdb`, `starlette`, `uvicorn`
+
+**Optional:** `psutil` (CPU/mem), `pynvml` (GPU)
+
+```bash
+pip install -e ".[all]"    # everything
+```
+
+## Project Structure
+
+```
+waddle/
+    __init__.py          # Public API: init, log, finish, ...
+    _api.py              # Module-level functions
+    _run.py              # Run class
+    _state.py            # Global run state
+    _db.py               # WaddleDB (DuckDB)
+    _schema.py           # DDL
+    _git.py              # Git detection (optional)
+    _sysmetrics.py       # System monitor thread
+    _types.py            # RepoInfo dataclass
+    _dashboard_api.py    # Dashboard queries
+    _server.py           # Starlette app
+    cli.py               # CLI: init, ls, serve
+    static/index.html    # Dashboard frontend
+```
 
 ## License
 
-Waddle is released under the MIT License. See `LICENSE` for details.
+MIT
