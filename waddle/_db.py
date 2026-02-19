@@ -70,21 +70,22 @@ class WaddleDB:
         origin_url: Optional[str],
         default_branch: str = "main",
     ) -> RepoInfo:
-        row = self.fetchone("SELECT id FROM repos WHERE name = $1", [name])
-        rid = row[0] if row else uuid.uuid4().hex
         abs_path = os.path.abspath(path)
-        existing = self.fetchone("SELECT created_at FROM repos WHERE id = $1", [rid])
-        created = existing[0] if existing else _now()
-        self.execute(
-            """INSERT INTO repos (id, name, path, origin_url, default_branch, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               ON CONFLICT (id) DO UPDATE SET
-                   name = EXCLUDED.name,
-                   path = EXCLUDED.path,
-                   origin_url = EXCLUDED.origin_url,
-                   default_branch = EXCLUDED.default_branch""",
-            [rid, name, abs_path, origin_url, default_branch, created],
-        )
+        row = self.fetchone("SELECT id FROM repos WHERE name = $1", [name])
+        if row:
+            rid = row[0]
+            self.execute(
+                """UPDATE repos SET path = $1, origin_url = $2, default_branch = $3
+                   WHERE id = $4""",
+                [abs_path, origin_url, default_branch, rid],
+            )
+        else:
+            rid = uuid.uuid4().hex
+            self.execute(
+                """INSERT INTO repos (id, name, path, origin_url, default_branch, created_at)
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                [rid, name, abs_path, origin_url, default_branch, _now()],
+            )
         return RepoInfo(rid, name, abs_path, origin_url, default_branch)
 
     def get_repo(self, name: str) -> RepoInfo:
