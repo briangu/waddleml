@@ -91,9 +91,9 @@ waddle.log({"loss": 0.1}, step=100)           # explicit step
 
 Log individual parameters or tags after init.
 
-### `waddle.log_artifact(name, path, kind, inline)`
+### `waddle.log_artifact(name, path=None, kind="file", inline=False)`
 
-Log an output file. `inline=True` stores contents in DuckDB.
+Log an output file. If `path` is given, records its location (and optionally stores its contents in DuckDB when `inline=True`).
 
 ### `waddle.finish()`
 
