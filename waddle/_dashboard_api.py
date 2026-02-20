@@ -26,7 +26,7 @@ class DashboardAPI:
     ) -> List[Dict[str, Any]]:
         conn = self._connect()
         try:
-            sql = "SELECT id, project, name, status, started_at, ended_at, commit_sha, entry FROM runs"
+            sql = "SELECT id, project, name, status, started_at, ended_at, commit_sha FROM runs"
             conditions = []
             params: list = []
             if project:
@@ -47,7 +47,7 @@ class DashboardAPI:
             params.extend([limit, offset])
 
             rows = conn.execute(sql, params).fetchall()
-            cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha", "entry"]
+            cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha"]
             return [dict(zip(cols, row)) for row in rows]
         finally:
             conn.close()
@@ -56,12 +56,12 @@ class DashboardAPI:
         conn = self._connect()
         try:
             row = conn.execute(
-                "SELECT id, project, name, status, started_at, ended_at, commit_sha, entry, env, config, notes FROM runs WHERE id = $1",
+                "SELECT id, project, name, status, started_at, ended_at, commit_sha, env, config, notes FROM runs WHERE id = $1",
                 [run_id],
             ).fetchone()
             if not row:
                 return {}
-            cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha", "entry", "env", "config", "notes"]
+            cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha", "env", "config", "notes"]
             run = dict(zip(cols, row))
 
             # parse JSON fields
@@ -142,10 +142,10 @@ class DashboardAPI:
 
             # run info
             rows = conn.execute(
-                f"SELECT id, project, name, status, started_at, ended_at, commit_sha, entry FROM runs WHERE id IN ({placeholders})",
+                f"SELECT id, project, name, status, started_at, ended_at, commit_sha FROM runs WHERE id IN ({placeholders})",
                 run_ids,
             ).fetchall()
-            cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha", "entry"]
+            cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha"]
             runs = [dict(zip(cols, r)) for r in rows]
 
             # param diff
@@ -183,6 +183,35 @@ class DashboardAPI:
                 "params": all_params,
                 "metrics": metrics,
             }
+        finally:
+            conn.close()
+
+    def metric_keys_global(self) -> List[str]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT DISTINCT key FROM metrics WHERE key NOT LIKE 'system/%' ORDER BY key"
+            ).fetchall()
+            return [r[0] for r in rows]
+        finally:
+            conn.close()
+
+    def metric_summary(self, key: str, limit: int = 20) -> List[Dict[str, Any]]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT m.run_id, r.name, m.value
+                FROM metrics m
+                JOIN runs r ON r.id = m.run_id
+                WHERE m.key = $1
+                  AND m.step = (SELECT MAX(m2.step) FROM metrics m2 WHERE m2.run_id = m.run_id AND m2.key = $1)
+                ORDER BY r.started_at DESC
+                LIMIT $2
+                """,
+                [key, limit],
+            ).fetchall()
+            return [{"run_id": r[0], "name": r[1], "value": r[2]} for r in rows]
         finally:
             conn.close()
 

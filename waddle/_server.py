@@ -66,6 +66,16 @@ def create_app(db_path: str, static_dir: str) -> Starlette:
             return JSONResponse({"ok": True})
         return JSONResponse({"error": "delete failed"}, status_code=500)
 
+    async def metric_keys(request: Request) -> JSONResponse:
+        keys = api.metric_keys_global()
+        return JSONResponse(keys)
+
+    async def metric_summary(request: Request) -> JSONResponse:
+        key = request.query_params.get("key", "")
+        limit = int(request.query_params.get("limit", "20"))
+        data = api.metric_summary(key, limit=limit)
+        return JSONResponse(data)
+
     async def static_file(request: Request) -> Response:
         file_path = static / request.path_params.get("path", "")
         if file_path.exists() and file_path.is_file():
@@ -90,6 +100,8 @@ def create_app(db_path: str, static_dir: str) -> Starlette:
         Route("/api/runs/{run_id}/metrics", get_metrics),
         Route("/api/runs/{run_id}", delete_run, methods=["DELETE"]),
         Route("/api/compare", compare_runs, methods=["POST"]),
+        Route("/api/metric-keys", metric_keys),
+        Route("/api/metric-summary", metric_summary),
         Route("/static/{path:path}", static_file),
         WebSocketRoute("/ws", ws_endpoint),
     ]

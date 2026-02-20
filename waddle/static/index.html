@@ -113,6 +113,15 @@
       </div>
 
       <div class="panel active" id="panel-overview">
+        <div id="overviewChart" style="display:none">
+          <div class="card">
+            <h3>Metrics Overview</h3>
+            <div class="toolbar">
+              <label>Metric: <select id="overviewMetricSelect" onchange="loadOverviewChart()"></select></label>
+            </div>
+            <div class="chart-container"><div id="overviewBarChart" style="height:360px"></div></div>
+          </div>
+        </div>
         <div class="card"><h3>Run Info</h3><dl class="kv-grid" id="runInfo"></dl></div>
         <div class="card"><h3>Parameters</h3><dl class="kv-grid" id="runParams"></dl></div>
         <div class="card"><h3>Tags</h3><dl class="kv-grid" id="runTags"></dl></div>
@@ -169,6 +178,7 @@ async function loadRuns() {
     allRuns = await res.json();
   } catch(e) { allRuns = []; }
   renderRunList();
+  loadOverviewMetricKeys();
 }
 
 function renderRunList() {
@@ -400,7 +410,7 @@ async function showCompare() {
 function hideCompare() {
   document.getElementById('compareView').style.display = 'none';
   if(currentRun) { document.getElementById('runView').style.display = ''; }
-  else { document.getElementById('placeholder').style.display = ''; }
+  else { showOverview(); }
 }
 
 // ---- Actions ----
@@ -409,7 +419,7 @@ async function deleteCurrentRun() {
   try { await fetch(`${API}/api/runs/${currentRun.id}`, {method:'DELETE'}); } catch(e) {}
   currentRun = null; runDetail = null;
   document.getElementById('runView').style.display = 'none';
-  document.getElementById('placeholder').style.display = '';
+  showOverview();
   loadRuns();
 }
 
@@ -471,6 +481,45 @@ function chartLayout(title, xaxis, yaxis, small) {
     showlegend: !small,
     legend: {bgcolor:'transparent', font:{color:'#8899bb'}},
   };
+}
+
+// ---- Overview Chart ----
+function showOverview() {
+  document.getElementById('placeholder').style.display = '';
+}
+
+async function loadOverviewMetricKeys() {
+  try {
+    const res = await fetch(`${API}/api/metric-keys`);
+    const keys = await res.json();
+    const sel = document.getElementById('overviewMetricSelect');
+    sel.innerHTML = '';
+    if (!keys.length) {
+      document.getElementById('overviewChart').style.display = 'none';
+      return;
+    }
+    keys.forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; sel.appendChild(o); });
+    document.getElementById('overviewChart').style.display = '';
+    loadOverviewChart();
+  } catch(e) {
+    document.getElementById('overviewChart').style.display = 'none';
+  }
+}
+
+async function loadOverviewChart() {
+  const key = document.getElementById('overviewMetricSelect').value;
+  if (!key) { Plotly.purge('overviewBarChart'); return; }
+  try {
+    const res = await fetch(`${API}/api/metric-summary?key=${encodeURIComponent(key)}&limit=20`);
+    const data = await res.json();
+    if (!data.length) { Plotly.purge('overviewBarChart'); return; }
+    const labels = data.map(d => d.name || d.run_id.slice(0, 8));
+    const values = data.map(d => d.value);
+    Plotly.newPlot('overviewBarChart', [{
+      x: labels, y: values, type: 'bar',
+      marker: { color: '#65c3ff' },
+    }], chartLayout(key + ' (final value per run)', 'Run', 'Value'), {responsive: true, displayModeBar: false});
+  } catch(e) { Plotly.purge('overviewBarChart'); }
 }
 
 // ---- Init ----
