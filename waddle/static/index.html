@@ -69,7 +69,7 @@
 
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 
-  .chart-container { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-bottom: 12px; }
+  .chart-container { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-bottom: 12px; width: 100%; }
   .empty { color: var(--muted); text-align: center; padding: 40px; }
   .kv-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 13px; }
   .kv-grid dt { color: var(--muted); }
@@ -195,7 +195,10 @@ function renderRunList() {
     const isSelected = selectedIds.has(r.id);
     div.className = 'run-card' + (isActive ? ' active' : '') + (isSelected ? ' selected' : '');
     const start = r.started_at ? new Date(r.started_at * 1000).toLocaleString() : '';
-    const statusCls = 'status status-' + (r.status || 'running');
+    let displayStatus = r.status || 'running';
+    // Detect stale "running" runs (no ended_at, started > 5 min ago with no recent activity)
+    if(displayStatus === 'running' && r.ended_at) displayStatus = 'completed';
+    const statusCls = 'status status-' + displayStatus;
     div.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px">
         <input type="checkbox" ${isSelected?'checked':''} onclick="event.stopPropagation();toggleSelect('${r.id}')"/>
@@ -305,16 +308,21 @@ function plotMetric() {
 
 function plotAllMetrics(keys) {
   const container = document.getElementById('allMetricsCharts');
-  container.innerHTML = '';
   keys.forEach(key => {
+    const chartId = 'allchart-' + key.replace(/[^a-zA-Z0-9]/g, '_');
+    let chart = document.getElementById(chartId);
+    if(!chart) {
+      const div = document.createElement('div');
+      div.className = 'chart-container';
+      chart = document.createElement('div');
+      chart.id = chartId;
+      chart.style.height = '200px';
+      chart.style.width = '100%';
+      div.appendChild(chart);
+      container.appendChild(div);
+    }
     const data = allMetrics.filter(m => m.key === key).sort((a,b) => a.step - b.step);
     if(!data.length) return;
-    const div = document.createElement('div');
-    div.className = 'chart-container';
-    const chart = document.createElement('div');
-    chart.style.height = '200px';
-    div.appendChild(chart);
-    container.appendChild(div);
     Plotly.newPlot(chart, [{
       x: data.map(d => d.step), y: data.map(d => d.value),
       type: 'scatter', mode: 'lines', line: {color: '#65c3ff', width: 1.5},
@@ -444,13 +452,32 @@ function connectWS() {
         const msg = JSON.parse(e.data);
         if(msg.type==='metric' && currentRun && msg.run_id===currentRun.id) {
           allMetrics.push({key:msg.key, step:msg.step, ts:msg.ts, value:msg.value});
+          // Add new metric key to selector if not present
           const sel = document.getElementById('metricSelect');
-          if(sel.value === msg.key) plotMetric();
+          if(![...sel.options].some(o => o.value === msg.key)) {
+            const o = document.createElement('option'); o.value=msg.key; o.textContent=msg.key; sel.appendChild(o);
+          }
+          scheduleChartUpdate();
         }
         if(msg.type==='status') loadRuns();
       } catch(_){}
     };
   } catch(e) {}
+}
+
+// ---- Debounced chart update (batches rapid WS messages) ----
+let _chartUpdateTimer = null;
+function scheduleChartUpdate() {
+  if(_chartUpdateTimer) return;
+  _chartUpdateTimer = setTimeout(() => {
+    _chartUpdateTimer = null;
+    plotMetric();
+    const mkeys = (runDetail?.metric_keys || []).filter(k => !k.startsWith('system/'));
+    // Also include any new keys from WS that aren't in metric_keys yet
+    const allKeys = new Set(mkeys);
+    allMetrics.forEach(m => { if(!m.key.startsWith('system/')) allKeys.add(m.key); });
+    plotAllMetrics([...allKeys]);
+  }, 500);
 }
 
 // ---- Helpers ----

@@ -95,8 +95,16 @@ class Run:
         api = DashboardAPI(db=self._db)
         app = create_app(api=api)
 
+        # Capture the event loop so log() can push WebSocket updates
+        self._ws_loop = None
+
         def _run():
-            uvicorn.run(app, host=host, port=port, log_level="warning")
+            import asyncio
+            loop = asyncio.new_event_loop()
+            self._ws_loop = loop
+            config = uvicorn.Config(app, host=host, port=port, log_level="warning", loop="asyncio")
+            server = uvicorn.Server(config)
+            loop.run_until_complete(server.serve())
 
         threading.Thread(target=_run, daemon=True).start()
         print(f"Dashboard at http://{host}:{port}")
@@ -115,6 +123,17 @@ class Run:
                 "INSERT INTO metrics (run_id, key, step, ts, value) VALUES ($1, $2, $3, $4, $5)",
                 [self.id, key, step, ts, float(value)],
             )
+            self._broadcast_metric(key, step, ts, float(value))
+
+    def _broadcast_metric(self, key: str, step: int, ts: float, value: float) -> None:
+        """Push metric to WebSocket clients (non-blocking)."""
+        loop = getattr(self, '_ws_loop', None)
+        if loop is None:
+            return
+        import asyncio
+        from ._server import broadcast_ws
+        msg = {"type": "metric", "run_id": self.id, "key": key, "step": step, "ts": ts, "value": value}
+        asyncio.run_coroutine_threadsafe(broadcast_ws(msg), loop)
 
     def log_param(self, key: str, value: Any) -> None:
         self._db.execute(
