@@ -52,7 +52,22 @@ class DashboardAPI:
 
             rows = conn.execute(sql, params).fetchall()
             cols = ["id", "project", "name", "status", "started_at", "ended_at", "commit_sha"]
-            return [dict(zip(cols, row)) for row in rows]
+            import time
+            now = time.time()
+            results = []
+            for row in rows:
+                d = dict(zip(cols, row))
+                # Detect stale runs: status is "running" but no metrics in last 5 minutes
+                if d["status"] == "running":
+                    last_ts = conn.execute(
+                        "SELECT MAX(ts) FROM metrics WHERE run_id = $1", [d["id"]]
+                    ).fetchone()[0]
+                    if last_ts is not None and (now - last_ts) > 300:
+                        d["status"] = "aborted"
+                    elif last_ts is None and d["started_at"] and (now - d["started_at"]) > 300:
+                        d["status"] = "aborted"
+                results.append(d)
+            return results
         finally:
             conn.close()
 

@@ -195,10 +195,7 @@ function renderRunList() {
     const isSelected = selectedIds.has(r.id);
     div.className = 'run-card' + (isActive ? ' active' : '') + (isSelected ? ' selected' : '');
     const start = r.started_at ? new Date(r.started_at * 1000).toLocaleString() : '';
-    let displayStatus = r.status || 'running';
-    // Detect stale "running" runs (no ended_at, started > 5 min ago with no recent activity)
-    if(displayStatus === 'running' && r.ended_at) displayStatus = 'completed';
-    const statusCls = 'status status-' + displayStatus;
+    const statusCls = 'status status-' + (r.status || 'running');
     div.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px">
         <input type="checkbox" ${isSelected?'checked':''} onclick="event.stopPropagation();toggleSelect('${r.id}')"/>
@@ -243,6 +240,8 @@ async function selectRun(r) {
   } catch(e) { allMetrics = []; }
 
   renderDetail();
+  // Plotly needs a tick to measure container width on first render
+  setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
 }
 
 function renderDetail() {
