@@ -17,8 +17,11 @@ from ._dashboard_api import DashboardAPI
 _ws_clients: Set[WebSocket] = set()
 
 
-def create_app(db_path: str, static_dir: str) -> Starlette:
-    api = DashboardAPI(db_path)
+def create_app(db_path: str = None, static_dir: str = None, api: DashboardAPI = None) -> Starlette:
+    if api is None:
+        api = DashboardAPI(db_path)
+    if static_dir is None:
+        static_dir = str(Path(__file__).parent / "static")
     static = Path(static_dir)
 
     async def index(request: Request) -> Response:

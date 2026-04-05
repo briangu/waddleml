@@ -106,3 +106,11 @@ def finish() -> None:
         return
     run.finish()
     _state.set_active_run(None)
+
+
+def serve_dashboard(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Start the dashboard server in a background thread, sharing the active run's DB."""
+    run = _state.get_active_run()
+    if run is None:
+        raise RuntimeError("No active run. Call waddle.init() first.")
+    run.serve_dashboard(host=host, port=port)

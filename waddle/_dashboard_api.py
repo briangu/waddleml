@@ -9,10 +9,14 @@ import duckdb
 
 
 class DashboardAPI:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str = None, db: "WaddleDB | None" = None):
         self._db_path = db_path
+        self._db = db  # shared WaddleDB instance (from training process)
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
+        if self._db is not None:
+            # Use a cursor from the shared connection (same process)
+            return self._db._conn.cursor()
         return duckdb.connect(self._db_path, read_only=True)
 
     def list_runs(

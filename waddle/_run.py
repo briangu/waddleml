@@ -82,6 +82,25 @@ class Run:
         if not self._finished:
             self.finish(status="aborted")
 
+    def serve_dashboard(self, host: str = "0.0.0.0", port: int = 8000) -> None:
+        """Start the dashboard web server in a background thread.
+
+        Shares the same DB connection — no file locking issue.
+        """
+        import threading
+        import uvicorn
+        from ._dashboard_api import DashboardAPI
+        from ._server import create_app
+
+        api = DashboardAPI(db=self._db)
+        app = create_app(api=api)
+
+        def _run():
+            uvicorn.run(app, host=host, port=port, log_level="warning")
+
+        threading.Thread(target=_run, daemon=True).start()
+        print(f"Dashboard at http://{host}:{port}")
+
     # ---- logging ----
 
     def log(self, metrics: Dict[str, float], step: Optional[int] = None) -> None:
