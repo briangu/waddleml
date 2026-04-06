@@ -235,7 +235,7 @@ async function selectRun(r) {
 
   // load metrics
   try {
-    const res = await fetch(`${API}/api/runs/${r.id}/metrics`);
+    const res = await fetch(`${API}/api/runs/${r.id}/metrics?limit=50000`);
     allMetrics = await res.json();
   } catch(e) { allMetrics = []; }
 
